@@ -64,10 +64,10 @@ language = "ja"
 # "ptt"   = hold key to record, release to transcribe (push-to-talk)
 # "toggle"= press once to start, press again to stop
 mode = "ptt"
-# pynput key name. Examples: "ctrl_r" (right Ctrl), "alt_r", "f9",
-# "scroll_lock", "pause". Right Ctrl rarely clashes with app shortcuts
-# (e.g. Slack), unlike Alt-based keys.
-key = "ctrl_r"
+# Hotkey: a single pynput key name, or a list to allow several.
+# Examples: "ctrl_r", ["ctrl_r", "ctrl_l"], "f9", "scroll_lock", "pause".
+# Ctrl keys rarely clash with app shortcuts (e.g. Slack), unlike Alt-based keys.
+key = ["ctrl_r", "ctrl_l"]
 
 [audio]
 sample_rate = 16000
@@ -264,6 +264,16 @@ def key_matches(key, target) -> bool:
     return False
 
 
+def parse_keys(value) -> list:
+    """Parse the config hotkey, which may be a single key or a list of keys."""
+    names = value if isinstance(value, (list, tuple)) else [value]
+    return [parse_key(n) for n in names]
+
+
+def key_matches_any(key, targets) -> bool:
+    return any(key_matches(key, t) for t in targets)
+
+
 # --------------------------------------------------------------------------- #
 # Main app
 # --------------------------------------------------------------------------- #
@@ -283,7 +293,7 @@ class App:
             device = int(device_cfg)
         self.recorder = Recorder(cfg["audio"]["sample_rate"], device)
 
-        self.target_key = parse_key(cfg["hotkey"]["key"])
+        self.target_keys = parse_keys(cfg["hotkey"]["key"])
         self.mode = cfg["hotkey"]["mode"].lower()
         self._active = False  # currently recording
         self._jobs: queue.Queue = queue.Queue()
@@ -369,7 +379,7 @@ class App:
 
     # --- key handlers --- #
     def _on_press(self, key):
-        if not key_matches(key, self.target_key):
+        if not key_matches_any(key, self.target_keys):
             return
         if self.mode == "ptt":
             self._start_recording()
@@ -380,7 +390,7 @@ class App:
                 self._start_recording()
 
     def _on_release(self, key):
-        if self.mode == "ptt" and key_matches(key, self.target_key):
+        if self.mode == "ptt" and key_matches_any(key, self.target_keys):
             self._stop_recording()
 
     def run(self):
@@ -389,7 +399,9 @@ class App:
         self.recorder.start()
 
         mode_desc = "hold" if self.mode == "ptt" else "toggle"
-        print(f"[ready] {mode_desc.capitalize()} '{self.cfg['hotkey']['key']}' to dictate. "
+        keys = self.cfg["hotkey"]["key"]
+        keys_str = " or ".join(keys) if isinstance(keys, (list, tuple)) else str(keys)
+        print(f"[ready] {mode_desc.capitalize()} '{keys_str}' to dictate. "
               f"Ctrl+C to quit.")
 
         listener = keyboard.Listener(on_press=self._on_press, on_release=self._on_release)

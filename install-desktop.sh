@@ -11,7 +11,7 @@ cat > "$APPS/voice-term.desktop" <<EOF
 [Desktop Entry]
 Type=Application
 Name=voice-term
-Comment=Local push-to-talk voice typing (hold Right Ctrl)
+Comment=Local push-to-talk voice typing (hold either Ctrl)
 Exec=gnome-terminal --title=voice-term -- bash -lc "$HERE/voice-term; echo; echo '[voice-term ended] press Enter to close'; read"
 Icon=audio-input-microphone
 Terminal=false

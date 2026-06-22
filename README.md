@@ -32,7 +32,7 @@ few things they often get wrong:
 
 - 🔒 100% local & offline (after the one-time model download)
 - 🎚️ Push-to-talk (hold) or toggle mode
-- ⌨️ Configurable global hotkey (default: **Right Ctrl**)
+- ⌨️ Configurable global hotkey (default: **either Ctrl** — left or right)
 - 📋 Clipboard-paste, direct-type, or copy-only output
 - 🖥️ X11 (`xdotool`) and Wayland (`wtype` / `ydotool`) auto-detection
 - 🔔 Desktop notifications for recording / done status
@@ -71,8 +71,8 @@ python3 -m venv .venv
 ./voice-term --list-devices  # list microphones
 ```
 
-Focus any app, **hold Right Ctrl**, speak, release — the text is pasted at your
-cursor. First run downloads the model (~1.5 GB), which takes a few minutes.
+Focus any app, **hold either Ctrl** (left or right), speak, release — the text
+is pasted at your cursor. First run downloads the model (~1.5 GB), a few minutes.
 Press **Ctrl+C** to quit.
 
 ### One-click launcher (GNOME)
@@ -98,7 +98,7 @@ Auto-created on first run at `~/.config/voice-term/config.toml`.
 | `model.compute_type` | `auto` | `auto` → `float16` (GPU) / `int8` (CPU). |
 | `model.language` | `ja` | `ja`, `en`, … or `auto` to detect. |
 | `hotkey.mode` | `ptt` | `ptt` (hold) or `toggle` (press to start/stop). |
-| `hotkey.key` | `ctrl_r` | pynput key name: `alt_r`, `f9`, `pause`, … or a single char. |
+| `hotkey.key` | `["ctrl_r", "ctrl_l"]` | One key or a list. pynput names: `alt_r`, `f9`, `pause`, … or a single char. |
 | `audio.device` | `""` | Mic name substring or index; empty = default. |
 | `output.method` | `paste` | `paste`, `type`, or `clipboard` (manual paste). |
 | `output.trailing_space` | `false` | Add a space after inserted text. |
@@ -117,7 +117,7 @@ Auto-created on first run at `~/.config/voice-term/config.toml`.
 ## How it works
 
 ```
-Right Ctrl held → sounddevice captures 16 kHz mono
+Ctrl held → sounddevice captures 16 kHz mono
    → faster-whisper (GPU) transcribes on release
       → text copied to clipboard → Ctrl+V sent to the focused window
 ```
