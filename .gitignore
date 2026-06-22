@@ -1,0 +1,17 @@
+# Python virtual environment
+.venv/
+venv/
+
+# Python caches
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Local config / runtime (user-specific)
+*.lock
+
+# Editor / OS
+.vscode/
+.idea/
+*.swp
+.DS_Store

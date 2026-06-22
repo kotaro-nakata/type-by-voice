@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# Launcher for voice-term. Activates the venv and makes the pip-installed
+# CUDA/cuDNN libraries discoverable by ctranslate2 (faster-whisper backend).
+set -euo pipefail
+
+HERE="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
+VENV="$HERE/.venv"
+PY="$VENV/bin/python"
+
+if [[ ! -x "$PY" ]]; then
+    echo "venv not found at $VENV. Run: python3 -m venv .venv && .venv/bin/pip install -r requirements.txt" >&2
+    exit 1
+fi
+
+# Add bundled NVIDIA libs (nvidia-cudnn-cu12 / nvidia-cublas-cu12) to the loader path.
+NVIDIA_LIBS="$("$PY" - <<'PYEOF'
+import os, glob, importlib.util
+spec = importlib.util.find_spec("nvidia")
+if spec and spec.submodule_search_locations:
+    base = list(spec.submodule_search_locations)[0]
+    print(os.pathsep.join(sorted(set(glob.glob(base + "/*/lib")))))
+PYEOF
+)"
+if [[ -n "${NVIDIA_LIBS}" ]]; then
+    export LD_LIBRARY_PATH="${NVIDIA_LIBS}${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+fi
+
+export PYTHONUNBUFFERED=1
+exec "$PY" "$HERE/voice_term.py" "$@"

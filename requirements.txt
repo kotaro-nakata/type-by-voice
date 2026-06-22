@@ -1,0 +1,11 @@
+# Core
+faster-whisper>=1.0.3
+sounddevice>=0.4.6
+numpy>=1.26
+pynput>=1.7.6
+
+# GPU runtime libraries (CUDA 12 / cuDNN 9) for ctranslate2.
+# These ship the .so files; the launcher adds them to LD_LIBRARY_PATH.
+# If you run CPU-only, these are unused (harmless) and can be removed.
+nvidia-cublas-cu12
+nvidia-cudnn-cu12>=9.0
