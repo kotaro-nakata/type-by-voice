@@ -9,3 +9,7 @@ pynput>=1.7.6
 # If you run CPU-only, these are unused (harmless) and can be removed.
 nvidia-cublas-cu12
 nvidia-cudnn-cu12>=9.0
+
+# The colour-coded tray icon runs under the *system* python and needs:
+#   sudo apt install gir1.2-ayatanaappindicator3-0.1   (PyGObject + PIL are
+#   already present on Ubuntu GNOME). It is optional; the app works without it.
