@@ -12,6 +12,15 @@ if [[ ! -x "$PY" ]]; then
     exit 1
 fi
 
+# When launched from the GNOME app grid / dock (no terminal attached), send
+# output to a log file so the .desktop entry can call us directly — keeping it
+# a clean, spec-compliant Exec with no shell redirection.
+if [[ ! -t 1 ]]; then
+    LOG="${XDG_CACHE_HOME:-$HOME/.cache}/voice-term.log"
+    mkdir -p "$(dirname "$LOG")"
+    exec >>"$LOG" 2>&1
+fi
+
 # Add bundled NVIDIA libs (nvidia-cudnn-cu12 / nvidia-cublas-cu12) to the loader path.
 NVIDIA_LIBS="$("$PY" - <<'PYEOF'
 import os, glob, importlib.util
