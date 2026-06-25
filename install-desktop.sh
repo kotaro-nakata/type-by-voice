@@ -7,15 +7,15 @@ HERE="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
 APPS="$HOME/.local/share/applications"
 mkdir -p "$APPS"
 
-# Runs without a terminal: state is shown by the on-screen overlay + toasts.
-# Logs go to ~/.cache/voice-term.log for troubleshooting. Right-click the
-# overlay to quit.
+# Runs without a terminal: feedback is the colour-coded tray icon (quit from its
+# menu). The launcher itself logs to ~/.cache/voice-term.log when it has no
+# terminal, so the Exec line stays a clean, spec-compliant single command.
 cat > "$APPS/voice-term.desktop" <<EOF
 [Desktop Entry]
 Type=Application
 Name=voice-term
 Comment=Local push-to-talk voice typing (hold Windows+Alt)
-Exec=bash -lc "exec '$HERE/voice-term' >> \$HOME/.cache/voice-term.log 2>&1"
+Exec="$HERE/voice-term"
 Icon=audio-input-microphone
 Terminal=false
 Categories=Utility;
