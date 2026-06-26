@@ -21,9 +21,9 @@ few things they often get wrong:
 
 - ⚡ **GPU + faster-whisper** — fast *and* accurate. Many tools default to CPU
   or the lighter VOSK engine; this uses Whisper `large-v3-turbo` on your GPU.
-- 🌏 **Great multilingual / Japanese support out of the box** — defaults to
-  Japanese but works for any Whisper-supported language. Most English-first
-  tools handle this poorly.
+- 🌏 **Speak any language, type that language** — auto-detects per phrase
+  (Japanese + English by default), so switching languages is just… speaking.
+  No mode toggling, and great Japanese support that English-first tools botch.
 - 🧩 **Works in every app** — output goes to the focused window via clipboard
   paste, so Unicode/Japanese never drops characters (unlike per-character
   typing).
@@ -137,7 +137,8 @@ Auto-created on first run at `~/.config/voice-term/config.toml`.
 | `model.name` | `large-v3-turbo` | Multilingual + fast. Or `large-v3`, `medium`, a local path. |
 | `model.device` | `auto` | `auto` → CUDA if available, else CPU. |
 | `model.compute_type` | `auto` | `auto` → `float16` (GPU) / `int8` (CPU). |
-| `model.language` | `ja` | `ja`, `en`, … or `auto` to detect. |
+| `model.language` | `auto` | `auto` detects per phrase (restricted to `auto_languages`), so English types English and Japanese types Japanese. Or force `ja`, `en`, … |
+| `model.auto_languages` | `["ja", "en"]` | Candidates considered when `language = "auto"`. Keep it short for reliable detection. |
 | `hotkey.mode` | `ptt` | `ptt` (hold) or `toggle` (press to start/stop). |
 | `hotkey.key` | `"cmd+alt"` | One key, a `+`-combo held together (e.g. `cmd+alt`), or a list of alternatives. Names: `cmd`/`super`/`win`, `alt`, `ctrl`, `f9`, … or a single char. |
 | `audio.device` | `""` | Mic name substring or index; empty = default. |

@@ -57,8 +57,15 @@ name = "large-v3-turbo"
 device = "auto"
 # "auto" -> float16 on GPU, int8 on CPU. Or "float16" / "int8" / "int8_float16".
 compute_type = "auto"
-# Transcription language. "ja" for Japanese, "en" for English, "auto" to detect.
-language = "ja"
+# Transcription language.
+#   "auto" -> detect per phrase, but only among `auto_languages` below, so you
+#             can switch languages just by speaking (English in -> English out,
+#             Japanese in -> Japanese out). This is the default.
+#   "ja" / "en" / … -> force that language for every phrase.
+language = "auto"
+# Candidate languages considered when language = "auto". Keep this short (the
+# fewer, the more reliable the detection). Whisper codes: "ja", "en", ...
+auto_languages = ["ja", "en"]
 
 [hotkey]
 # "ptt"   = hold key to record, release to transcribe (push-to-talk)
@@ -335,8 +342,9 @@ class App:
     def __init__(self, cfg: dict):
         self.cfg = cfg
         self.language = cfg["model"]["language"]
+        self.auto_languages = [str(l).lower() for l in cfg["model"].get("auto_languages", ["ja", "en"])]
         if self.language.lower() == "auto":
-            self.language = None
+            self.language = None   # detect per phrase, restricted to auto_languages
 
         self.outputter = Outputter(cfg["output"]["method"], cfg["output"]["trailing_space"])
         self.outputter.warn_if_missing()
@@ -445,6 +453,27 @@ class App:
         self._set_state("transcribing")
         self._jobs.put(audio)
 
+    def _pick_language(self, audio) -> str | None:
+        """Choose the transcription language.
+
+        If a fixed language is configured, use it. Otherwise detect, but only
+        among `auto_languages` — so speaking English types English and Japanese
+        types Japanese, without misfiring into some third language.
+        """
+        if self.language is not None:
+            return self.language
+        try:
+            _, _, probs = self.model.detect_language(audio=audio)
+        except Exception as e:
+            print(f"[warn] Language detection failed ({e}); letting Whisper decide.")
+            return None
+        if not self.auto_languages:
+            return None
+        ranked = {lang: p for lang, p in probs}
+        best = max(self.auto_languages, key=lambda l: ranked.get(l, 0.0))
+        print(f"[lang] {best} ({ranked.get(best, 0.0):.2f})")
+        return best
+
     # --- transcription worker --- #
     def _worker(self):
         while not self._stop.is_set():
@@ -453,9 +482,10 @@ class App:
             except queue.Empty:
                 continue
             try:
+                language = self._pick_language(audio)
                 segments, info = self.model.transcribe(
                     audio,
-                    language=self.language,
+                    language=language,
                     beam_size=5,
                     vad_filter=True,
                 )
