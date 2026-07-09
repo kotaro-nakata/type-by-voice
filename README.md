@@ -49,7 +49,7 @@ few things they often get wrong:
 
 ## Requirements
 
-- Linux (developed on Ubuntu / GNOME, X11)
+- Linux (developed on Ubuntu / GNOME, X11) or **Windows 10/11**
 - Python 3.11+
 - NVIDIA GPU with CUDA for best speed — **falls back to CPU automatically**
 
@@ -127,6 +127,45 @@ desktop toasts are your feedback; logs go to `~/.cache/voice-term.log`.
 ```bash
 ln -s "$(pwd)/voice-term" ~/.local/bin/voice-term   # then run: voice-term
 ```
+
+## Windows
+
+Everything runs in-process on Windows — no external tools like `xdotool`
+needed. Clipboard paste uses `pyperclip` + a synthesized **Ctrl+V**, and the
+tray icon (same colours + voice ripples) is drawn with `pystray`.
+
+### Install & run
+
+1. Install Python 3.11+ from [python.org](https://python.org)
+   (check "Add python.exe to PATH").
+2. Clone or download this repository.
+3. Double-click **`run_windows.bat`** — the first run creates the venv,
+   installs dependencies and starts the app in the background (no console
+   window). The first dictation also downloads the model (~1.5 GB).
+4. (Optional) Double-click **`install_shortcut.vbs`** to put a
+   **"Voice Term"** icon on your desktop that launches the app.
+
+Or from a terminal:
+
+```bat
+py -3 -m venv .venv
+.venv\Scripts\pip install -r requirements.txt
+.venv\Scripts\python voice_term.py
+```
+
+### Windows notes
+
+- **Hotkey**: the default is **hold Ctrl + Alt together** (the Win key is
+  reserved by the OS). Change it in `%APPDATA%\voice-term\config.toml`.
+- **Config path**: `%APPDATA%\voice-term\config.toml`
+  (Linux: `~/.config/voice-term/config.toml`).
+- **Logs**: `%LOCALAPPDATA%\voice-term\voice-term.log` (when launched via
+  `run_windows.bat`); also reachable from the tray menu.
+- **GPU**: works out of the box — the CUDA 12 / cuDNN 9 runtime DLLs are
+  installed from pip (`nvidia-cublas-cu12` / `nvidia-cudnn-cu12`) and preloaded
+  at startup, so `device = "auto"` picks your NVIDIA GPU automatically and
+  falls back to CPU/int8 (with a startup self-check) when it can't run.
+- Quit from the tray icon's menu (終了).
 
 ## Configuration
 

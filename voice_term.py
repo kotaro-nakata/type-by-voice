@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import os
 import sys
-import shutil
 import signal
 import subprocess
 import threading
@@ -28,25 +27,16 @@ import numpy as np
 import sounddevice as sd
 from pynput import keyboard
 
-
-CONFIG_PATH = Path.home() / ".config" / "voice-term" / "config.toml"
-
-_HAS_NOTIFY = shutil.which("notify-send") is not None
+import platform_backend as pb
+from platform_backend import notify
 
 
-def notify(summary: str, body: str = "", timeout_ms: int = 1500):
-    """Best-effort desktop toast so feedback shows even without a terminal."""
-    if not _HAS_NOTIFY:
-        return
-    try:
-        subprocess.run(
-            ["notify-send", "-a", "voice-term", "-t", str(timeout_ms), summary, body],
-            check=False,
-        )
-    except Exception:
-        pass
+CONFIG_PATH = pb.config_dir() / "config.toml"
 
-DEFAULT_CONFIG = """\
+# Windows reserves the Win key for the OS, so the default combo differs per OS.
+DEFAULT_HOTKEY = "ctrl+alt" if pb.IS_WINDOWS else "cmd+alt"
+
+DEFAULT_CONFIG = f"""\
 # voice-term configuration
 
 [model]
@@ -74,9 +64,9 @@ mode = "ptt"
 # Hotkey: a single key, a "+"-joined combo to hold together, or a list of
 # alternatives. Modifier names cmd/super/win, alt, ctrl, shift each match their
 # left & right keys.
-# Examples: "cmd+alt" (hold Windows+Alt), "ctrl_r", ["ctrl_r", "ctrl_l"], "f9".
-# A combo like cmd+alt avoids clashing with copy/paste (Ctrl+C / Ctrl+V).
-key = "cmd+alt"
+# Examples: "cmd+alt" (hold Super+Alt), "ctrl_r", ["ctrl_r", "ctrl_l"], "f9".
+# Recommended: Linux "cmd+alt"; Windows "ctrl+alt" (the OS grabs the Win key).
+key = "{DEFAULT_HOTKEY}"
 
 [audio]
 sample_rate = 16000
@@ -93,10 +83,10 @@ method = "paste"
 trailing_space = false
 
 [ui]
-# Show a colour-coded status icon in the top-bar tray: grey=loading, blue=idle,
-# green=recording (with sonar ripples that pulse to your voice), amber=
-# transcribing. Needs the AyatanaAppIndicator typelib; if it's missing the app
-# still works, just without the icon.
+# Show a colour-coded status icon in the top-bar tray: grey=loading, green=idle
+# (ready), red=recording (with sonar ripples that pulse to your voice),
+# yellow=transcribing (processing). Needs the AyatanaAppIndicator typelib; if
+# it's missing the app still works, just without the icon.
 tray = true
 """
 
@@ -104,7 +94,8 @@ tray = true
 def load_config() -> dict:
     if not CONFIG_PATH.exists():
         CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
-        CONFIG_PATH.write_text(DEFAULT_CONFIG)
+        # TOML は UTF-8 必須。Windows の既定 (cp932) で書くと tomllib が読めない
+        CONFIG_PATH.write_text(DEFAULT_CONFIG, encoding="utf-8")
         print(f"[init] Created default config at {CONFIG_PATH}")
     with CONFIG_PATH.open("rb") as f:
         cfg = tomllib.load(f)
@@ -115,93 +106,6 @@ def load_config() -> dict:
         for k, v in vals.items():
             cfg[section].setdefault(k, v)
     return cfg
-
-
-# --------------------------------------------------------------------------- #
-# Output backends
-# --------------------------------------------------------------------------- #
-class Outputter:
-    """Sends text to the focused window. Detects X11 vs Wayland tools."""
-
-    def __init__(self, method: str, trailing_space: bool):
-        self.method = method
-        self.trailing_space = trailing_space
-        self.session = os.environ.get("XDG_SESSION_TYPE", "").lower()
-        self._detect()
-
-    def _detect(self):
-        self.copy_cmd = None
-        self.paste_cmd = None
-        self.type_cmd = None
-
-        if self.session == "wayland":
-            if shutil.which("wl-copy"):
-                self.copy_cmd = ["wl-copy"]
-            if shutil.which("wtype"):
-                self.paste_cmd = ["wtype", "-M", "ctrl", "v", "-m", "ctrl"]
-                self.type_cmd = ["wtype", "-"]
-            elif shutil.which("ydotool"):
-                self.paste_cmd = ["ydotool", "key", "29:1", "47:1", "47:0", "29:0"]
-                self.type_cmd = ["ydotool", "type", "--file", "-"]
-        else:  # x11 (default)
-            if shutil.which("xclip"):
-                self.copy_cmd = ["xclip", "-selection", "clipboard"]
-            elif shutil.which("xsel"):
-                self.copy_cmd = ["xsel", "--clipboard", "--input"]
-            if shutil.which("xdotool"):
-                self.paste_cmd = ["xdotool", "key", "--clearmodifiers", "ctrl+v"]
-                self.type_cmd = ["xdotool", "type", "--clearmodifiers", "--file", "-"]
-
-    def _copy(self, text: str) -> bool:
-        if not self.copy_cmd:
-            return False
-        try:
-            subprocess.run(self.copy_cmd, input=text.encode("utf-8"), check=True)
-            return True
-        except subprocess.SubprocessError:
-            return False
-
-    def warn_if_missing(self):
-        if self.method in ("paste", "clipboard") and not self.copy_cmd:
-            tool = "wl-copy" if self.session == "wayland" else "xclip"
-            print(f"[warn] No clipboard tool found. Install {tool}.")
-        if self.method == "paste" and not self.paste_cmd:
-            tool = "wtype/ydotool" if self.session == "wayland" else "xdotool"
-            print(f"[warn] No paste tool found. Install {tool}.")
-        if self.method == "type" and not self.type_cmd:
-            tool = "wtype/ydotool" if self.session == "wayland" else "xdotool"
-            print(f"[warn] No typing tool found. Install {tool}.")
-
-    def send(self, text: str):
-        if not text:
-            return
-        if self.trailing_space:
-            text = text + " "
-
-        if self.method == "type" and self.type_cmd:
-            try:
-                subprocess.run(self.type_cmd, input=text.encode("utf-8"), check=True)
-                return
-            except subprocess.SubprocessError as e:
-                print(f"[warn] type failed ({e}); falling back to clipboard.")
-
-        # paste / clipboard (and type-fallback)
-        if not self._copy(text):
-            print("[error] Could not copy to clipboard; printing instead:")
-            print(text)
-            return
-        if self.method == "clipboard":
-            print("[output] Copied to clipboard (paste with Ctrl+V).")
-            return
-        # Give the held hotkey a moment to fully release before pasting.
-        time.sleep(0.05)
-        if self.paste_cmd:
-            try:
-                subprocess.run(self.paste_cmd, check=True)
-            except subprocess.SubprocessError as e:
-                print(f"[warn] paste failed ({e}); text is on the clipboard.")
-        else:
-            print("[output] Copied to clipboard (no paste tool; Ctrl+V manually).")
 
 
 # --------------------------------------------------------------------------- #
@@ -346,7 +250,7 @@ class App:
         if self.language.lower() == "auto":
             self.language = None   # detect per phrase, restricted to auto_languages
 
-        self.outputter = Outputter(cfg["output"]["method"], cfg["output"]["trailing_space"])
+        self.outputter = pb.make_injector(cfg["output"]["method"], cfg["output"]["trailing_space"])
         self.outputter.warn_if_missing()
 
         device_cfg = cfg["audio"]["device"]
@@ -367,11 +271,10 @@ class App:
 
         # IPC for the tray helper: we write "<state> [level]", it polls and
         # renders the icon (e.g. sonar ripples that pulse to the live level).
-        runtime = Path(os.environ.get("XDG_RUNTIME_DIR", "/tmp"))
-        self._ipc_dir = runtime / "voice-term"
-        self._ipc_dir.mkdir(parents=True, exist_ok=True)
+        self._ipc_dir = pb.runtime_dir()
         self._state_file = self._ipc_dir / "state"
         self._tray_proc = None
+        self._win_tray = None
         self._tray_enabled = cfg.get("ui", {}).get("tray", True)
         self._state = "loading"
 
@@ -379,7 +282,7 @@ class App:
         self.model = None
 
     def _load_model(self):
-        _preload_cuda_libs()
+        pb.preload_accel_libs()
         from faster_whisper import WhisperModel
 
         name = self.cfg["model"]["name"]
@@ -387,7 +290,7 @@ class App:
         compute_type = self.cfg["model"]["compute_type"].lower()
 
         if device == "auto":
-            device = "cuda" if _cuda_available() else "cpu"
+            device = "cuda" if pb.cuda_available() else "cpu"
         if compute_type == "auto":
             compute_type = "float16" if device == "cuda" else "int8"
 
@@ -395,6 +298,11 @@ class App:
         print("[model] First run downloads the model; this can take a while...")
         try:
             model = WhisperModel(name, device=device, compute_type=compute_type)
+            if device == "cuda":
+                # CUDA の DLL ロードは遅延実行: コンストラクタが成功しても
+                # 最初の encode で cublas/cudnn が無いと失敗（最悪ハング）する。
+                # ここでダミー音声を1回通して実際に動くことを検証する。
+                model.detect_language(audio=np.zeros(16000, dtype=np.float32))
         except Exception as e:
             if device == "cuda":
                 print(f"[warn] CUDA load failed ({e}); falling back to CPU/int8.")
@@ -563,14 +471,26 @@ class App:
         self.recorder.close()
         if self._tray_proc and self._tray_proc.poll() is None:
             self._tray_proc.terminate()
+        if self._win_tray is not None:
+            self._win_tray.stop()
 
     def _start_tray(self):
-        """Launch the colour-coded tray icon as a separate system-python helper.
+        """Show the colour-coded tray icon.
 
-        It lives in a different toolkit (GTK) and process. Best-effort: if the
-        AppIndicator typelib is missing we just skip it.
+        Windows: pystray runs in-process on a daemon thread (see tray_win.py).
+        Linux: launched as a separate system-python helper, because GTK/
+        AppIndicator lives outside the venv. Best-effort either way.
         """
         if not self._tray_enabled:
+            return
+        if pb.IS_WINDOWS:
+            try:
+                from tray_win import WinTray
+
+                self._win_tray = WinTray(self)
+                self._win_tray.start()
+            except Exception as e:
+                print(f"[warn] Could not start tray icon: {e}")
             return
         helper = Path(__file__).resolve().parent / "tray_indicator.py"
         if not helper.exists():
@@ -609,8 +529,10 @@ class App:
         self._listener = keyboard.Listener(on_press=self._on_press, on_release=self._on_release)
         self._listener.start()
 
-        # The tray "Quit" item sends SIGTERM to us; shut down gracefully.
-        signal.signal(signal.SIGTERM, lambda *a: self.shutdown())
+        # Linux: the tray "Quit" item sends SIGTERM to us; shut down gracefully.
+        # (Windows never delivers SIGTERM — its tray calls shutdown() directly.)
+        if hasattr(signal, "SIGTERM") and not pb.IS_WINDOWS:
+            signal.signal(signal.SIGTERM, lambda *a: self.shutdown())
 
         try:
             while not self._stop.is_set():
@@ -621,78 +543,22 @@ class App:
             self.shutdown()
 
 
-def _preload_cuda_libs():
-    """Load the pip-installed CUDA/cuDNN .so files into the process directly.
-
-    ctranslate2 dlopen()s libs like libcublas.so.12 / libcudnn*.so.9 by SONAME.
-    Preloading them with RTLD_GLOBAL makes those symbols resolvable no matter
-    what LD_LIBRARY_PATH is — robust against polluted shell environments
-    (e.g. ROS) or launchers that don't export the path. Best-effort; on CPU-only
-    boxes the nvidia packages are absent and this simply does nothing.
-    """
-    import ctypes
-    import glob
-    import importlib.util
-
-    spec = importlib.util.find_spec("nvidia")
-    if not spec or not spec.submodule_search_locations:
-        return
-    base = list(spec.submodule_search_locations)[0]
-    # Order matters (cublasLt before cublas); cuDNN libs cross-depend, so we
-    # retry a couple of passes to satisfy load ordering.
-    patterns = [
-        "cublas/lib/libcublasLt.so*",
-        "cublas/lib/libcublas.so*",
-        "cuda_nvrtc/lib/libnvrtc*.so*",
-        "cudnn/lib/libcudnn_*.so*",
-        "cudnn/lib/libcudnn.so*",
-    ]
-    paths = []
-    for pat in patterns:
-        paths.extend(sorted(glob.glob(os.path.join(base, pat))))
-    pending = list(dict.fromkeys(paths))  # de-dupe, keep order
-    for _ in range(3):
-        if not pending:
-            break
-        still = []
-        for p in pending:
-            try:
-                ctypes.CDLL(p, mode=ctypes.RTLD_GLOBAL)
-            except OSError:
-                still.append(p)
-        pending = still
-
-
-def _cuda_available() -> bool:
-    try:
-        from ctranslate2 import get_cuda_device_count
-
-        return get_cuda_device_count() > 0
-    except Exception:
-        return shutil.which("nvidia-smi") is not None
-
-
-def _acquire_single_instance():
-    """Prevent a second instance (double listeners -> double paste)."""
-    import fcntl
-
-    runtime = os.environ.get("XDG_RUNTIME_DIR", "/tmp")
-    lock_path = Path(runtime) / "voice-term.lock"
-    fh = open(lock_path, "w")
-    try:
-        fcntl.flock(fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except OSError:
-        print("[error] voice-term is already running. Exiting.")
-        notify("voice-term", "すでに起動しています")
-        sys.exit(1)
-    return fh  # keep open for the process lifetime
-
-
 def main():
+    if pb.IS_WINDOWS:
+        # Windows consoles default to cp932; keep Japanese/emoji prints safe.
+        try:
+            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+            sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
     if "--list-devices" in sys.argv:
         print(sd.query_devices())
         return
-    _lock = _acquire_single_instance()  # noqa: F841 (held for lifetime)
+    _lock = pb.acquire_single_instance()  # noqa: F841 (held for lifetime)
+    if _lock is None:
+        print("[error] voice-term is already running. Exiting.")
+        notify("voice-term", "すでに起動しています")
+        sys.exit(1)
     cfg = load_config()
     app = App(cfg)
     # Make Ctrl+C work even while threads are alive.
