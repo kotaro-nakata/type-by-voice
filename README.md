@@ -49,9 +49,10 @@ few things they often get wrong:
 
 ## Requirements
 
-- Linux (developed on Ubuntu / GNOME, X11)
+- Linux (developed on Ubuntu / GNOME, X11) or **Windows 10/11**
 - Python 3.11+
 - NVIDIA GPU with CUDA for best speed — **falls back to CPU automatically**
+  (Windows currently runs CPU-only by default; see the Windows section)
 
 ## Install
 
@@ -127,6 +128,43 @@ desktop toasts are your feedback; logs go to `~/.cache/voice-term.log`.
 ```bash
 ln -s "$(pwd)/voice-term" ~/.local/bin/voice-term   # then run: voice-term
 ```
+
+## Windows
+
+Everything runs in-process on Windows — no external tools like `xdotool`
+needed. Clipboard paste uses `pyperclip` + a synthesized **Ctrl+V**, and the
+tray icon (same colours + voice ripples) is drawn with `pystray`.
+
+### Install & run
+
+1. Install Python 3.11+ from [python.org](https://python.org)
+   (check "Add python.exe to PATH").
+2. Clone or download this repository.
+3. Double-click **`run_windows.bat`** — the first run creates the venv,
+   installs dependencies and starts the app in the background (no console
+   window). The first dictation also downloads the model (~1.5 GB).
+
+Or from a terminal:
+
+```bat
+py -3 -m venv .venv
+.venv\Scripts\pip install -r requirements.txt
+.venv\Scripts\python voice_term.py
+```
+
+### Windows notes
+
+- **Hotkey**: the default is **hold Ctrl + Alt together** (the Win key is
+  reserved by the OS). Change it in `%APPDATA%\voice-term\config.toml`.
+- **Config path**: `%APPDATA%\voice-term\config.toml`
+  (Linux: `~/.config/voice-term/config.toml`).
+- **Logs**: `%LOCALAPPDATA%\voice-term\voice-term.log` (when launched via
+  `run_windows.bat`); also reachable from the tray menu.
+- **GPU**: not wired up on Windows yet — it runs CPU/int8 (the `small` or
+  `medium` model is a good speed/quality trade-off on CPU). CUDA support is
+  planned; `device = "cuda"` may work if you install the CUDA 12 + cuDNN 9
+  DLLs yourself.
+- Quit from the tray icon's menu (終了).
 
 ## Configuration
 

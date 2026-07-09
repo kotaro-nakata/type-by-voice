@@ -1,15 +1,20 @@
-# Core
+# Core (all platforms)
 faster-whisper>=1.0.3
 sounddevice>=0.4.6
 numpy>=1.26
 pynput>=1.7.6
 
-# GPU runtime libraries (CUDA 12 / cuDNN 9) for ctranslate2.
-# These ship the .so files; the launcher adds them to LD_LIBRARY_PATH.
-# If you run CPU-only, these are unused (harmless) and can be removed.
-nvidia-cublas-cu12
-nvidia-cudnn-cu12>=9.0
+# Windows only: clipboard + in-process tray icon
+pyperclip>=1.8 ; sys_platform == "win32"
+pystray>=0.19 ; sys_platform == "win32"
+Pillow>=10 ; sys_platform == "win32"
 
-# The colour-coded tray icon runs under the *system* python and needs:
+# GPU runtime libraries (CUDA 12 / cuDNN 9) for ctranslate2 — Linux.
+# These ship the .so files; platform_backend preloads them at startup.
+# If you run CPU-only, these are unused (harmless) and can be removed.
+nvidia-cublas-cu12 ; sys_platform == "linux"
+nvidia-cudnn-cu12>=9.0 ; sys_platform == "linux"
+
+# The Linux tray icon runs under the *system* python and needs:
 #   sudo apt install gir1.2-ayatanaappindicator3-0.1   (PyGObject + PIL are
 #   already present on Ubuntu GNOME). It is optional; the app works without it.
