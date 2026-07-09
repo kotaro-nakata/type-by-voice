@@ -52,7 +52,6 @@ few things they often get wrong:
 - Linux (developed on Ubuntu / GNOME, X11) or **Windows 10/11**
 - Python 3.11+
 - NVIDIA GPU with CUDA for best speed — **falls back to CPU automatically**
-  (Windows currently runs CPU-only by default; see the Windows section)
 
 ## Install
 
@@ -160,10 +159,10 @@ py -3 -m venv .venv
   (Linux: `~/.config/voice-term/config.toml`).
 - **Logs**: `%LOCALAPPDATA%\voice-term\voice-term.log` (when launched via
   `run_windows.bat`); also reachable from the tray menu.
-- **GPU**: not wired up on Windows yet — it runs CPU/int8 (the `small` or
-  `medium` model is a good speed/quality trade-off on CPU). CUDA support is
-  planned; `device = "cuda"` may work if you install the CUDA 12 + cuDNN 9
-  DLLs yourself.
+- **GPU**: works out of the box — the CUDA 12 / cuDNN 9 runtime DLLs are
+  installed from pip (`nvidia-cublas-cu12` / `nvidia-cudnn-cu12`) and preloaded
+  at startup, so `device = "auto"` picks your NVIDIA GPU automatically and
+  falls back to CPU/int8 (with a startup self-check) when it can't run.
 - Quit from the tray icon's menu (終了).
 
 ## Configuration

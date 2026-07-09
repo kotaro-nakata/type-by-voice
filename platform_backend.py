@@ -179,20 +179,26 @@ def _preload_linux_cuda_libs():
 def _add_windows_dll_dirs():
     """Register the nvidia pip packages' DLL folders with the loader.
 
-    On Windows the runtime ships .dll files under <pkg>/bin (or lib);
-    os.add_dll_directory() makes them resolvable without touching PATH.
+    On Windows the runtime ships .dll files under <pkg>/bin (or lib).
+    os.add_dll_directory() だけでは不十分: ctranslate2 は実行時に素の
+    LoadLibrary("cublas64_12.dll") で解決するため PATH しか見ない。
+    そのため PATH の先頭にも同じディレクトリを積む。
     """
     base = _nvidia_package_root()
     if not base:
         return
+    found = []
     for sub in ("cublas", "cudnn", "cuda_nvrtc"):
         for leaf in ("bin", "lib"):
             d = os.path.join(base, sub, leaf)
             if os.path.isdir(d):
+                found.append(d)
                 try:
                     os.add_dll_directory(d)
                 except OSError:
                     pass
+    if found:
+        os.environ["PATH"] = os.pathsep.join(found) + os.pathsep + os.environ.get("PATH", "")
 
 
 def cuda_available() -> bool:

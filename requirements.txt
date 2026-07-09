@@ -9,11 +9,11 @@ pyperclip>=1.8 ; sys_platform == "win32"
 pystray>=0.19 ; sys_platform == "win32"
 Pillow>=10 ; sys_platform == "win32"
 
-# GPU runtime libraries (CUDA 12 / cuDNN 9) for ctranslate2 — Linux.
-# These ship the .so files; platform_backend preloads them at startup.
+# GPU runtime libraries (CUDA 12 / cuDNN 9) for ctranslate2 — Linux & Windows.
+# They ship the .so/.dll files; platform_backend makes them findable at startup.
 # If you run CPU-only, these are unused (harmless) and can be removed.
-nvidia-cublas-cu12 ; sys_platform == "linux"
-nvidia-cudnn-cu12>=9.0 ; sys_platform == "linux"
+nvidia-cublas-cu12 ; sys_platform == "linux" or sys_platform == "win32"
+nvidia-cudnn-cu12>=9.0 ; sys_platform == "linux" or sys_platform == "win32"
 
 # The Linux tray icon runs under the *system* python and needs:
 #   sudo apt install gir1.2-ayatanaappindicator3-0.1   (PyGObject + PIL are

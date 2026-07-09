@@ -94,7 +94,8 @@ tray = true
 def load_config() -> dict:
     if not CONFIG_PATH.exists():
         CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
-        CONFIG_PATH.write_text(DEFAULT_CONFIG)
+        # TOML は UTF-8 必須。Windows の既定 (cp932) で書くと tomllib が読めない
+        CONFIG_PATH.write_text(DEFAULT_CONFIG, encoding="utf-8")
         print(f"[init] Created default config at {CONFIG_PATH}")
     with CONFIG_PATH.open("rb") as f:
         cfg = tomllib.load(f)
@@ -297,6 +298,11 @@ class App:
         print("[model] First run downloads the model; this can take a while...")
         try:
             model = WhisperModel(name, device=device, compute_type=compute_type)
+            if device == "cuda":
+                # CUDA の DLL ロードは遅延実行: コンストラクタが成功しても
+                # 最初の encode で cublas/cudnn が無いと失敗（最悪ハング）する。
+                # ここでダミー音声を1回通して実際に動くことを検証する。
+                model.detect_language(audio=np.zeros(16000, dtype=np.float32))
         except Exception as e:
             if device == "cuda":
                 print(f"[warn] CUDA load failed ({e}); falling back to CPU/int8.")
