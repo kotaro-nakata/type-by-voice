@@ -6,9 +6,9 @@ Telegram / mozc / Wi-Fi live). It carries no text — colour and motion convey t
 state:
 
     loading       grey dot
-    idle / ready   blue dot   (running, waiting for the hotkey)
-    recording      green dot with sonar ripples that pulse to your voice
-    transcribing   amber dot
+    idle / ready   green dot  (running, waiting for the hotkey)
+    recording      red dot with sonar ripples that pulse to your voice
+    transcribing   yellow dot (processing)
 
 It is deliberately decoupled from the main app (which lives in a venv with
 faster-whisper): the main app writes "<state> [level]" to a small file; this
@@ -21,6 +21,7 @@ GNOME once `gir1.2-ayatanaappindicator3-0.1` is installed.
 import argparse
 import os
 import signal
+import subprocess
 import time
 
 import gi
@@ -39,16 +40,43 @@ from PIL import Image, ImageDraw  # noqa: E402
 
 SIZE = 64
 C = SIZE / 2                 # center
-DOT_BASE = (108, 140, 255)   # idle blue
 COLORS = {
-    "loading": (150, 157, 170),
-    "idle": (108, 140, 255),
-    "transcribing": (251, 191, 36),
+    "loading": (150, 157, 170),   # grey
+    "idle": (52, 211, 153),       # green  (ready / waiting)
+    "transcribing": (251, 191, 36),  # yellow (processing)
 }
-GREEN = (52, 211, 153)
+REC_COLOR = (239, 68, 68)    # red  (recording)
 RIPPLE_MIN = 9.0             # ripples start at the dot edge
 RIPPLE_MAX = 30.0           # and fade out by here
 FPS_MS = 60                  # ~16 fps
+
+# Human-readable, colour-matched labels for the status menu item.
+STATE_LABELS = {
+    "loading": "読込中 (grey)",
+    "idle": "待機中 (green)",
+    "recording": "録音中 (red)",
+    "transcribing": "処理中 (yellow)",
+}
+
+
+def _log_path():
+    cache = os.environ.get("XDG_CACHE_HOME") or os.path.join(
+        os.path.expanduser("~"), ".cache")
+    return os.path.join(cache, "voice-term.log")
+
+
+def _config_path():
+    base = os.environ.get("XDG_CONFIG_HOME") or os.path.join(
+        os.path.expanduser("~"), ".config")
+    return os.path.join(base, "voice-term", "config.toml")
+
+
+def _open(path):
+    """Open a file in the user's default app (best-effort)."""
+    try:
+        subprocess.Popen(["xdg-open", path])
+    except Exception:
+        pass
 
 
 def _dot(draw, r, color, alpha=255):
@@ -77,8 +105,8 @@ def make_recording_frame(path, level, ripples):
         if alpha <= 0:
             continue
         d.ellipse([C - r, C - r, C + r, C + r],
-                  outline=GREEN + (alpha,), width=5)
-    _dot(d, 8 + 3 * level, GREEN)
+                  outline=REC_COLOR + (alpha,), width=5)
+    _dot(d, 8 + 3 * level, REC_COLOR)
     img.save(path)
 
 
@@ -118,11 +146,36 @@ class Tray:
 
     def _menu(self):
         menu = Gtk.Menu()
-        item = Gtk.MenuItem(label="終了 (Quit)")
-        item.connect("activate", self._quit)
-        menu.append(item)
+
+        # Live status line (updated each tick) — at a glance, what the app is
+        # doing right now. Insensitive so it reads as a label, not a button.
+        self.status_item = Gtk.MenuItem(label="状態: 読込中")
+        self.status_item.set_sensitive(False)
+        menu.append(self.status_item)
+
+        menu.append(Gtk.SeparatorMenuItem())
+
+        # Diagnostics: when something looks wrong, open the log or the config.
+        log_item = Gtk.MenuItem(label="ログを開く (Open log)")
+        log_item.connect("activate", lambda *_: _open(_log_path()))
+        menu.append(log_item)
+
+        cfg_item = Gtk.MenuItem(label="設定を開く (Open config)")
+        cfg_item.connect("activate", lambda *_: _open(_config_path()))
+        menu.append(cfg_item)
+
+        menu.append(Gtk.SeparatorMenuItem())
+
+        quit_item = Gtk.MenuItem(label="終了 (Quit)")
+        quit_item.connect("activate", self._quit)
+        menu.append(quit_item)
+
         menu.show_all()
         return menu
+
+    def _update_status_label(self):
+        label = STATE_LABELS.get(self.state, self.state)
+        self.status_item.set_label(f"状態: {label}")
 
     def _read_state(self):
         try:
@@ -181,7 +234,10 @@ class Tray:
         dt = now - self.last
         self.last = now
 
+        prev = self.state
         self._read_state()
+        if self.state != prev:
+            self._update_status_label()
         if self.state == "recording":
             self._animate(dt)
         else:
