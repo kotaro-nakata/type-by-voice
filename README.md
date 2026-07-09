@@ -142,6 +142,8 @@ tray icon (same colours + voice ripples) is drawn with `pystray`.
 3. Double-click **`run_windows.bat`** — the first run creates the venv,
    installs dependencies and starts the app in the background (no console
    window). The first dictation also downloads the model (~1.5 GB).
+4. (Optional) Double-click **`install_shortcut.vbs`** to put a
+   **"Voice Term"** icon on your desktop that launches the app.
 
 Or from a terminal:
 
