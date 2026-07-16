@@ -1,11 +1,7 @@
 """voice-term tray icon for Windows (pystray, in-process).
 
-Same colour language as the Linux GTK indicator (tray_indicator.py):
-
-    loading        grey dot
-    idle / ready   green dot  (running, waiting for the hotkey)
-    recording      red dot with sonar ripples that pulse to your voice
-    transcribing   yellow dot (processing)
+The artwork (white mic on a coloured badge, sonar ripples while recording)
+lives in icon_art.py, shared with the Linux GTK indicator (tray_indicator.py).
 
 Unlike Linux — where the tray must run under the system python (GTK) in a
 separate process — pystray works inside the venv, so this runs as a daemon
@@ -17,21 +13,13 @@ from __future__ import annotations
 import threading
 import time
 
-from PIL import Image, ImageDraw
+from PIL import Image
 
 import platform_backend as pb
+from icon_art import (COLORS, RIPPLE_MIN, RIPPLE_MAX,
+                      make_static_image, make_recording_image)
 
 
-SIZE = 64
-C = SIZE / 2                 # center
-COLORS = {
-    "loading": (150, 157, 170),      # grey
-    "idle": (52, 211, 153),          # green  (ready / waiting)
-    "transcribing": (251, 191, 36),  # yellow (processing)
-}
-REC_COLOR = (239, 68, 68)    # red  (recording)
-RIPPLE_MIN = 9.0             # ripples start at the dot edge
-RIPPLE_MAX = 30.0            # and fade out by here
 FRAME_S = 0.08               # ~12 fps while recording
 
 STATE_LABELS = {
@@ -40,37 +28,6 @@ STATE_LABELS = {
     "recording": "録音中",
     "transcribing": "処理中",
 }
-
-
-def _dot(draw, r, color, alpha=255):
-    draw.ellipse([C - r, C - r, C + r, C + r], fill=color + (alpha,))
-
-
-def make_static_image(color) -> Image.Image:
-    img = Image.new("RGBA", (SIZE, SIZE), (0, 0, 0, 0))
-    d = ImageDraw.Draw(img)
-    # a calm, clearly-visible dot with a soft two-layer halo
-    d.ellipse([C - 22, C - 22, C + 22, C + 22], fill=color + (45,))
-    d.ellipse([C - 16, C - 16, C + 16, C + 16], fill=color + (85,))
-    _dot(d, 13, color)
-    return img
-
-
-def make_recording_image(level, ripples) -> Image.Image:
-    img = Image.new("RGBA", (SIZE, SIZE), (0, 0, 0, 0))
-    d = ImageDraw.Draw(img)
-    # outermost (faintest) first, so inner rings paint over them
-    for r in sorted(ripples, reverse=True):
-        t = (r - RIPPLE_MIN) / (RIPPLE_MAX - RIPPLE_MIN)
-        t = max(0.0, min(1.0, t))
-        # Stay clearly visible even when you're quiet; brighten with the voice.
-        alpha = int((1.0 - t) * (140 + 115 * level))
-        if alpha <= 0:
-            continue
-        d.ellipse([C - r, C - r, C + r, C + r],
-                  outline=REC_COLOR + (alpha,), width=5)
-    _dot(d, 8 + 3 * level, REC_COLOR)
-    return img
 
 
 class WinTray:

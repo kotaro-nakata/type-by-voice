@@ -2,13 +2,14 @@
 """voice-term tray indicator (runs under the *system* python3).
 
 A small, colour-coded status icon in the GNOME top-bar indicator area (where
-Telegram / mozc / Wi-Fi live). It carries no text — colour and motion convey the
-state:
+Telegram / mozc / Wi-Fi live). The artwork (white mic on a coloured badge,
+sonar ripples while recording) lives in icon_art.py, shared with the Windows
+tray (tray_win.py). Colour and motion convey the state:
 
-    loading       grey dot
-    idle / ready   green dot  (running, waiting for the hotkey)
-    recording      red dot with sonar ripples that pulse to your voice
-    transcribing   yellow dot (processing)
+    loading        grey
+    idle / ready   green  (running, waiting for the hotkey)
+    recording      red with sonar ripples that pulse to your voice
+    transcribing   yellow (processing)
 
 It is deliberately decoupled from the main app (which lives in a venv with
 faster-whisper): the main app writes "<state> [level]" to a small file; this
@@ -35,19 +36,11 @@ except (ValueError, ImportError):
     from gi.repository import AppIndicator3 as AppIndicator
 from gi.repository import Gtk, GLib  # noqa: E402
 
-from PIL import Image, ImageDraw  # noqa: E402
+# icon_art sits next to this script; sys.path[0] is the script dir, so this
+# works even though we run under the *system* python, outside the venv.
+from icon_art import (COLORS, RIPPLE_MIN, RIPPLE_MAX,  # noqa: E402
+                      make_static_image, make_recording_image)
 
-
-SIZE = 64
-C = SIZE / 2                 # center
-COLORS = {
-    "loading": (150, 157, 170),   # grey
-    "idle": (52, 211, 153),       # green  (ready / waiting)
-    "transcribing": (251, 191, 36),  # yellow (processing)
-}
-REC_COLOR = (239, 68, 68)    # red  (recording)
-RIPPLE_MIN = 9.0             # ripples start at the dot edge
-RIPPLE_MAX = 30.0           # and fade out by here
 FPS_MS = 60                  # ~16 fps
 
 # Human-readable, colour-matched labels for the status menu item.
@@ -79,37 +72,6 @@ def _open(path):
         pass
 
 
-def _dot(draw, r, color, alpha=255):
-    draw.ellipse([C - r, C - r, C + r, C + r], fill=color + (alpha,))
-
-
-def make_static_icon(path, color):
-    img = Image.new("RGBA", (SIZE, SIZE), (0, 0, 0, 0))
-    d = ImageDraw.Draw(img)
-    # a calm, clearly-visible dot with a soft two-layer halo
-    d.ellipse([C - 22, C - 22, C + 22, C + 22], fill=color + (45,))
-    d.ellipse([C - 16, C - 16, C + 16, C + 16], fill=color + (85,))
-    _dot(d, 13, color)
-    img.save(path)
-
-
-def make_recording_frame(path, level, ripples):
-    img = Image.new("RGBA", (SIZE, SIZE), (0, 0, 0, 0))
-    d = ImageDraw.Draw(img)
-    # outermost (faintest) first, so inner rings paint over them
-    for r in sorted(ripples, reverse=True):
-        t = (r - RIPPLE_MIN) / (RIPPLE_MAX - RIPPLE_MIN)
-        t = max(0.0, min(1.0, t))
-        # Stay clearly visible even when you're quiet; brighten with the voice.
-        alpha = int((1.0 - t) * (140 + 115 * level))
-        if alpha <= 0:
-            continue
-        d.ellipse([C - r, C - r, C + r, C + r],
-                  outline=REC_COLOR + (alpha,), width=5)
-    _dot(d, 8 + 3 * level, REC_COLOR)
-    img.save(path)
-
-
 class Tray:
     def __init__(self, state_file, pid, icon_dir):
         self.state_file = state_file
@@ -129,7 +91,7 @@ class Tray:
         self.static_names = {}
         for name, col in COLORS.items():
             base = f"vt-{name}"
-            make_static_icon(os.path.join(icon_dir, base + ".png"), col)
+            make_static_image(col).save(os.path.join(icon_dir, base + ".png"))
             self.static_names[name] = base
 
         self.ind = AppIndicator.Indicator.new_with_path(
@@ -220,7 +182,8 @@ class Tray:
 
         self.frame = (self.frame + 1) % 8
         base = f"vt-rec{self.frame}"
-        make_recording_frame(os.path.join(self.icon_dir, base + ".png"), lvl, self.ripples)
+        make_recording_image(lvl, self.ripples).save(
+            os.path.join(self.icon_dir, base + ".png"))
         self.ind.set_icon_full(base, "recording")
 
     def _tick(self):

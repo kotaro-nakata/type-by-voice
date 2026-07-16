@@ -5,7 +5,12 @@ set -euo pipefail
 
 HERE="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
 APPS="$HOME/.local/share/applications"
-mkdir -p "$APPS"
+ICONS="$HOME/.local/share/icons/hicolor/256x256/apps"
+mkdir -p "$APPS" "$ICONS"
+
+# Render the app logo (white mic on a green badge) for the app grid. Uses the
+# system python: the tray artwork needs only Pillow, same as tray_indicator.py.
+python3 "$HERE/icon_art.py" "$ICONS/voice-term.png" 256
 
 # Runs without a terminal: feedback is the colour-coded tray icon (quit from its
 # menu). The launcher itself logs to ~/.cache/voice-term.log when it has no
@@ -16,7 +21,7 @@ Type=Application
 Name=voice-term
 Comment=Local push-to-talk voice typing (hold Windows+Alt)
 Exec="$HERE/voice-term"
-Icon=audio-input-microphone
+Icon=voice-term
 Terminal=false
 Categories=Utility;
 StartupNotify=true
