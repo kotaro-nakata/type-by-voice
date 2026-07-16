@@ -73,6 +73,10 @@ python3 -m venv .venv
 
 That's it — `./voice-term` and start talking. 👇
 
+> **Installer status:** Python-free Windows, macOS, and Linux packages are
+> under development. The implementation plan and release milestones are in
+> [PACKAGING_ROADMAP.md](PACKAGING_ROADMAP.md).
+
 > **Wayland:** install `wl-clipboard` and `wtype` (or `ydotool` + its daemon
 > and `/dev/uinput` permissions) instead of `xdotool`/`xclip`. The session type
 > is auto-detected at startup.
@@ -217,6 +221,29 @@ and brightness follow the live mic level while recording. The tray's *Quit*
 signals the main process.
 
 ## Contributing
+
+### Building a distributable bundle
+
+PyInstaller builds are OS-specific, so run these commands on the OS for which
+you are creating a package:
+
+```bash
+python -m pip install -r requirements.txt
+python -m pip install -r requirements-build.txt
+python scripts/build_bundle.py
+```
+
+The unpacked application is written to `dist/VoiceTerm/` (or a macOS app
+bundle). Start with this bundle when diagnosing native dependencies.
+
+On Windows, install Inno Setup 6 and then create the installer:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/build_windows_installer.ps1
+```
+
+Build output is intentionally ignored by Git. Do not commit signing
+certificates or credentials.
 
 Issues and PRs welcome — especially Wayland testing, packaging, and
 additional output backends. Two small Python files; dive in.

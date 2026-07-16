@@ -7,6 +7,12 @@ __pycache__/
 *.py[cod]
 *.egg-info/
 
+# Packaging output
+build/
+dist/
+installer/output/
+*.spec.bak
+
 # Local config / runtime (user-specific)
 *.lock
 

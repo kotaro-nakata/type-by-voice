@@ -27,6 +27,7 @@ import numpy as np
 import sounddevice as sd
 from pynput import keyboard
 
+from app_metadata import APP_NAME, APP_VERSION
 import platform_backend as pb
 from platform_backend import notify
 
@@ -543,7 +544,21 @@ class App:
             self.shutdown()
 
 
+def _configure_packaged_logging():
+    """Keep a useful log when a windowed frozen build has no terminal."""
+    if not getattr(sys, "frozen", False):
+        return
+    if sys.stdout is not None and getattr(sys.stdout, "isatty", lambda: False)():
+        return
+    path = pb.log_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    stream = path.open("a", encoding="utf-8", buffering=1)
+    sys.stdout = stream
+    sys.stderr = stream
+
+
 def main():
+    _configure_packaged_logging()
     if pb.IS_WINDOWS:
         # Windows consoles default to cp932; keep Japanese/emoji prints safe.
         try:
@@ -551,6 +566,9 @@ def main():
             sys.stderr.reconfigure(encoding="utf-8", errors="replace")
         except Exception:
             pass
+    if "--version" in sys.argv:
+        print(f"{APP_NAME} {APP_VERSION}")
+        return
     if "--list-devices" in sys.argv:
         print(sd.query_devices())
         return
