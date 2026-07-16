@@ -38,10 +38,10 @@ jobs:
 
     steps:
       - name: Check out source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.11"
           cache: pip
@@ -64,7 +64,7 @@ jobs:
         run: python scripts/build_bundle.py
 
       - name: Upload application bundle
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: VoiceTerm-${{ runner.os }}-x64
           path: dist/VoiceTerm
@@ -79,10 +79,10 @@ jobs:
 
     steps:
       - name: Check out source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Download Windows bundle
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: VoiceTerm-Windows-x64
           path: dist/VoiceTerm
@@ -95,7 +95,7 @@ jobs:
         run: ./scripts/build_windows_installer.ps1
 
       - name: Upload installer
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: VoiceTerm-Windows-Setup-x64
           path: installer/output/*.exe
