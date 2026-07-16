@@ -216,7 +216,7 @@ def cuda_available() -> bool:
 class TextInjector:
     """Sends text to the focused window.
 
-    method: "paste"     = copy to clipboard then send Ctrl+V
+    method: "paste"     = copy to clipboard then send Ctrl+Shift+V
             "type"      = type characters directly
             "clipboard" = copy to clipboard only, user pastes manually
     """
@@ -249,10 +249,16 @@ class LinuxInjector(TextInjector):
             if shutil.which("wl-copy"):
                 self.copy_cmd = ["wl-copy"]
             if shutil.which("wtype"):
-                self.paste_cmd = ["wtype", "-M", "ctrl", "v", "-m", "ctrl"]
+                self.paste_cmd = [
+                    "wtype", "-M", "ctrl", "-M", "shift", "v",
+                    "-m", "shift", "-m", "ctrl",
+                ]
                 self.type_cmd = ["wtype", "-"]
             elif shutil.which("ydotool"):
-                self.paste_cmd = ["ydotool", "key", "29:1", "47:1", "47:0", "29:0"]
+                self.paste_cmd = [
+                    "ydotool", "key",
+                    "29:1", "42:1", "47:1", "47:0", "42:0", "29:0",
+                ]
                 self.type_cmd = ["ydotool", "type", "--file", "-"]
         else:  # x11 (default)
             if shutil.which("xclip"):
@@ -260,7 +266,9 @@ class LinuxInjector(TextInjector):
             elif shutil.which("xsel"):
                 self.copy_cmd = ["xsel", "--clipboard", "--input"]
             if shutil.which("xdotool"):
-                self.paste_cmd = ["xdotool", "key", "--clearmodifiers", "ctrl+v"]
+                self.paste_cmd = [
+                    "xdotool", "key", "--clearmodifiers", "ctrl+shift+v",
+                ]
                 self.type_cmd = ["xdotool", "type", "--clearmodifiers", "--file", "-"]
 
     def _copy(self, text: str) -> bool:
@@ -302,7 +310,7 @@ class LinuxInjector(TextInjector):
             print(text)
             return
         if self.method == "clipboard":
-            print("[output] Copied to clipboard (paste with Ctrl+V).")
+            print("[output] Copied to clipboard (paste with Ctrl+Shift+V).")
             return
         # Give the held hotkey a moment to fully release before pasting.
         time.sleep(0.05)
@@ -312,11 +320,11 @@ class LinuxInjector(TextInjector):
             except subprocess.SubprocessError as e:
                 print(f"[warn] paste failed ({e}); text is on the clipboard.")
         else:
-            print("[output] Copied to clipboard (no paste tool; Ctrl+V manually).")
+            print("[output] Copied to clipboard (no paste tool; Ctrl+Shift+V manually).")
 
 
 class WindowsInjector(TextInjector):
-    """Clipboard via pyperclip, paste via a synthesized Ctrl+V (pynput).
+    """Clipboard via pyperclip, paste via synthesized Ctrl+Shift+V (pynput).
 
     No external tools needed: everything happens in-process. "paste" is the
     reliable path for Japanese/Unicode; "type" uses Controller.type() which
@@ -341,7 +349,7 @@ class WindowsInjector(TextInjector):
             print("[warn] pyperclip is not installed; run `pip install pyperclip`.")
 
     def _release_modifiers(self):
-        """Release any lingering modifiers so Ctrl+V doesn't become e.g. Ctrl+Alt+V."""
+        """Release modifiers so paste does not become e.g. Ctrl+Alt+Shift+V."""
         K = self._Key
         for k in (K.alt, K.alt_l, K.alt_r, K.alt_gr,
                   K.cmd, K.cmd_l, K.cmd_r,
@@ -379,15 +387,16 @@ class WindowsInjector(TextInjector):
             print(text)
             return
         if self.method == "clipboard":
-            print("[output] Copied to clipboard (paste with Ctrl+V).")
+            print("[output] Copied to clipboard (paste with Ctrl+Shift+V).")
             return
         # Give the held hotkey a moment to fully release before pasting.
         time.sleep(0.15)
         self._release_modifiers()
         try:
             with self._kbd.pressed(self._Key.ctrl):
-                self._kbd.press("v")
-                self._kbd.release("v")
+                with self._kbd.pressed(self._Key.shift):
+                    self._kbd.press("v")
+                    self._kbd.release("v")
         except Exception as e:
             print(f"[warn] paste failed ({e}); text is on the clipboard.")
 

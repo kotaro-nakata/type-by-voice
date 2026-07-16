@@ -135,7 +135,8 @@ ln -s "$(pwd)/voice-term" ~/.local/bin/voice-term   # then run: voice-term
 ## Windows
 
 Everything runs in-process on Windows — no external tools like `xdotool`
-needed. Clipboard paste uses `pyperclip` + a synthesized **Ctrl+V**, and the
+needed. Clipboard paste uses `pyperclip` + a synthesized **Ctrl+Shift+V**,
+which works with terminal-based chat clients as a text paste, and the
 tray icon (same colours + voice ripples) is drawn with `pystray`.
 
 ### Install & run
@@ -209,7 +210,7 @@ Auto-created on first run at `~/.config/voice-term/config.toml`.
 ```
 Win+Alt held → sounddevice captures 16 kHz mono (RMS level → tray ripples)
    → faster-whisper (GPU) transcribes on release
-      → text copied to clipboard → Ctrl+V sent to the focused window
+      → text copied to clipboard → Ctrl+Shift+V sent to the focused window
 ```
 
 The tray icon is a separate helper (`tray_indicator.py`) launched under the

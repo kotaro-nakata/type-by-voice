@@ -60,13 +60,13 @@ platform_backend.py
 - **Linux 実装**: 既存の `Outputter` ロジックをそのまま移植（X11/Wayland 判定）。
 - **Windows 実装**:
   - クリップボードコピー → `pyperclip`（依存追加）。
-  - 貼り付け → `pynput` の `keyboard.Controller` で Ctrl+V を送出。
+  - 貼り付け → `pynput` の `keyboard.Controller` で Ctrl+Shift+V を送出。
     subprocess を使わず同一プロセスで完結できる。
   - `method="type"`（直接タイプ）→ `keyboard.Controller().type(text)`。
     ただし日本語は取りこぼしやすいので **既定は `paste` 推奨**（README に明記）。
   - 貼り付け前に、押されているホットキー修飾キーが完全に離れるまで少し待つ
     （既存の `time.sleep(0.05)` を踏襲、必要なら延長）。
-- 注意: Ctrl+V を送る際、ユーザーがまだ修飾キー（Alt など）を握っている場合の
+- 注意: Ctrl+Shift+V を送る際、ユーザーがまだ修飾キー（Alt など）を握っている場合の
   誤爆を避けるため、`pynput.Controller` で明示的に modifier を離してから送る実装を検討。
 
 ### #2 トレイアイコン（クロスプラットフォーム化）
@@ -189,7 +189,7 @@ Windows GPU 版の nvidia パッケージは後続タスクで検証してから
    あるかもしれない。→ 起動シーケンスの再設計が最大の作業ポイント。
 2. **Windows でのグローバルホットキー**: `pynput` のフックが管理者権限や
    特定アプリ前面時に効かないケース。要実機確認。
-3. **貼り付けの信頼性**: Ctrl+V 送出タイミング / IME 状態依存。日本語入力時の
+3. **貼り付けの信頼性**: Ctrl+Shift+V 送出タイミング / IME 状態依存。日本語入力時の
    取りこぼしを実機で確認。
 4. **PortAudio デバイス**: Windows のデフォルト入力デバイス選択挙動の差異。
 5. **文字コード**: Windows のコンソール出力（cp932）で絵文字 print が化ける/
@@ -212,7 +212,7 @@ Windows GPU 版の nvidia パッケージは後続タスクで検証してから
 - [x] **Step 2-1**: `Outputter` を `platform_backend` の `TextInjector` 基底 +
       `LinuxInjector`（既存ロジック移植）に分離
 - [x] **Step 2-2**: `WindowsInjector` を実装 — `pyperclip` コピー +
-      `pynput.Controller` で Ctrl+V 送出（modifier 解放処理込み）
+      `pynput.Controller` で Ctrl+Shift+V 送出（modifier 解放処理込み）
 - [x] **Step 2-3**: `voice_term.py` から `make_injector()` 経由で利用するよう差し替え
 
 ### Phase 3: トレイ & 起動シーケンス再設計

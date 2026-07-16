@@ -76,7 +76,7 @@ sample_rate = 16000
 device = ""
 
 [output]
-# "paste"     = copy to clipboard then send Ctrl+V (fast, reliable for Japanese)
+# "paste"     = copy to clipboard then send Ctrl+Shift+V
 # "type"      = type characters directly (xdotool/wtype)
 # "clipboard" = copy to clipboard only, you paste manually
 method = "paste"
