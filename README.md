@@ -107,6 +107,25 @@ all the feedback, and while you talk it emits sonar ripples that pulse to your
 voice. First run downloads the model (~1.5 GB), a few minutes. Quit from the tray
 icon's menu (or **Ctrl+C** in a terminal).
 
+### Voice commands
+
+Speech beginning with **「コンピューター」** or **「パソコン」** is handled
+as a local desktop command instead of being pasted. Other speech remains normal
+dictation. Commands use fixed allowlisted actions and do not call an LLM or API.
+
+| Example | Action |
+|---|---|
+| 「コンピューター、ブラウザを開いて」 | Open the default browser |
+| 「コンピューター、ターミナルを開いて」 | Open a terminal |
+| 「コンピューター、設定を開いて」 | Open system settings |
+| 「コンピューター、ダウンロードフォルダを開いて」 | Open a known folder |
+| 「パソコン、猫の動画を検索して」 | Search with the default browser |
+| 「コンピューター、音量を30パーセントにして」 | Set system volume |
+| 「コンピューター、今何時ですか」 | Show the current time |
+
+Configure or disable this under `[commands]` in `config.toml`. Command results
+are read aloud locally by default; set `speak_feedback = false` to disable it.
+
 ### Status tray icon (recommended)
 
 A colour-coded dot shows up in the top-bar indicator area:

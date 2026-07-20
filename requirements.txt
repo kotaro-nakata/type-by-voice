@@ -8,6 +8,7 @@ pynput>=1.7.6
 pyperclip>=1.8 ; sys_platform == "win32"
 pystray>=0.19 ; sys_platform == "win32"
 Pillow>=10 ; sys_platform == "win32"
+pycaw>=20240210 ; sys_platform == "win32"
 
 # GPU runtime libraries (CUDA 12 / cuDNN 9) for ctranslate2 — Linux & Windows.
 # They ship the .so/.dll files; platform_backend makes them findable at startup.

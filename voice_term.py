@@ -29,6 +29,9 @@ from pynput import keyboard
 
 from app_metadata import APP_NAME, APP_VERSION
 import platform_backend as pb
+from command_router import CommandRouter
+from simple_commands import execute as execute_simple_command
+from speech_feedback import Speaker
 from platform_backend import notify
 
 
@@ -89,6 +92,13 @@ trailing_space = false
 # yellow=transcribing (processing). Needs the AyatanaAppIndicator typelib; if
 # it's missing the app still works, just without the icon.
 tray = true
+
+[commands]
+# Only speech beginning with a wake word is treated as a desktop command.
+enabled = true
+wake_words = ["コンピューター", "パソコン"]
+# Read command results aloud using the local OS speech engine.
+speak_feedback = true
 """
 
 
@@ -253,6 +263,10 @@ class App:
 
         self.outputter = pb.make_injector(cfg["output"]["method"], cfg["output"]["trailing_space"])
         self.outputter.warn_if_missing()
+        command_cfg = cfg.get("commands", {})
+        self.commands_enabled = bool(command_cfg.get("enabled", True))
+        self.command_router = CommandRouter(command_cfg.get("wake_words", ["コンピューター", "パソコン"]))
+        self.speaker = Speaker(bool(command_cfg.get("speak_feedback", True)))
 
         device_cfg = cfg["audio"]["device"]
         device = device_cfg
@@ -406,12 +420,28 @@ class App:
                 continue
             if text:
                 print(f"[✓] {text}")
-                notify("✓ 入力しました", text[:120])
-                self.outputter.send(text)
+                self._handle_transcribed_text(text)
             else:
                 print("[..] (no speech detected)")
                 notify("…無音でした", "", timeout_ms=800)
             self._set_state("idle")
+
+    def _handle_transcribed_text(self, text: str):
+        command = self.command_router.parse(text) if self.commands_enabled else None
+        if command is None:
+            notify("✓ 入力しました", text[:120])
+            self.outputter.send(text)
+            return
+        if command.kind == "unknown":
+            print(f"[command] Unsupported: {command.value}")
+            message = "その操作にはまだ対応していません"
+            notify("未対応の操作です", str(command.value)[:120])
+            self.speaker.speak(message)
+            return
+        ok, message = execute_simple_command(command)
+        print(f"[command] {'OK' if ok else 'FAILED'}: {message}")
+        notify("✓ 操作しました" if ok else "操作できませんでした", message)
+        self.speaker.speak(message)
 
     # --- key handlers --- #
     def _chord_satisfied(self) -> bool:
@@ -470,6 +500,7 @@ class App:
         if self._listener:
             self._listener.stop()
         self.recorder.close()
+        self.speaker.stop()
         if self._tray_proc and self._tray_proc.poll() is None:
             self._tray_proc.terminate()
         if self._win_tray is not None:
