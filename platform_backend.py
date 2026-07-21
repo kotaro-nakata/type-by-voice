@@ -248,18 +248,20 @@ class LinuxInjector(TextInjector):
         if self.session == "wayland":
             if shutil.which("wl-copy"):
                 self.copy_cmd = ["wl-copy"]
-            if shutil.which("wtype"):
-                self.paste_cmd = [
-                    "wtype", "-M", "ctrl", "-M", "shift", "v",
-                    "-m", "shift", "-m", "ctrl",
-                ]
-                self.type_cmd = ["wtype", "-"]
-            elif shutil.which("ydotool"):
+            # GNOME does not implement the protocol used by wtype. Prefer
+            # the uinput-based ydotool when it is available.
+            if shutil.which("ydotool"):
                 self.paste_cmd = [
                     "ydotool", "key",
                     "29:1", "42:1", "47:1", "47:0", "42:0", "29:0",
                 ]
                 self.type_cmd = ["ydotool", "type", "--file", "-"]
+            elif shutil.which("wtype"):
+                self.paste_cmd = [
+                    "wtype", "-M", "ctrl", "-M", "shift", "v",
+                    "-m", "shift", "-m", "ctrl",
+                ]
+                self.type_cmd = ["wtype", "-"]
         else:  # x11 (default)
             if shutil.which("xclip"):
                 self.copy_cmd = ["xclip", "-selection", "clipboard"]
