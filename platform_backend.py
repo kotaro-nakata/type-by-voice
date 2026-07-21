@@ -251,10 +251,7 @@ class LinuxInjector(TextInjector):
             # GNOME does not implement the protocol used by wtype. Prefer
             # the uinput-based ydotool when it is available.
             if shutil.which("ydotool"):
-                self.paste_cmd = [
-                    "ydotool", "key",
-                    "29:1", "42:1", "47:1", "47:0", "42:0", "29:0",
-                ]
+                self.paste_cmd = ["ydotool", "key", "ctrl+shift+v"]
                 self.type_cmd = ["ydotool", "type", "--file", "-"]
             elif shutil.which("wtype"):
                 self.paste_cmd = [

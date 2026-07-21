@@ -14,7 +14,7 @@ class LinuxInjectorTests(unittest.TestCase):
         } else None
         injector = pb.LinuxInjector("paste", False)
         self.assertEqual(injector.copy_cmd[0], "wl-copy")
-        self.assertEqual(injector.paste_cmd[0], "ydotool")
+        self.assertEqual(injector.paste_cmd, ["ydotool", "key", "ctrl+shift+v"])
 
 
 if __name__ == "__main__":
