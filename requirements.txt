@@ -3,6 +3,7 @@ faster-whisper>=1.0.3
 sounddevice>=0.4.6
 numpy>=1.26
 pynput>=1.7.6
+evdev>=1.7 ; sys_platform == "linux"
 
 # Windows only: clipboard + in-process tray icon
 pyperclip>=1.8 ; sys_platform == "win32"

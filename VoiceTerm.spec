@@ -21,6 +21,7 @@ datas = []
 binaries = []
 hiddenimports = [
     "platform_backend",
+    "wayland_hotkey",
 ]
 
 # These libraries load parts of their implementation dynamically, so static
@@ -32,6 +33,8 @@ for package in ("faster_whisper", "ctranslate2"):
     hiddenimports += package_hidden
 
 hiddenimports += collect_submodules("pynput")
+if sys.platform.startswith("linux"):
+    hiddenimports += collect_submodules("evdev")
 
 if sys.platform == "win32":
     hiddenimports += ["tray_win", "icon_art", "pystray", "pyperclip", "PIL"]

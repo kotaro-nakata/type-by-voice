@@ -224,6 +224,9 @@ Auto-created on first run at `~/.config/voice-term/config.toml`.
 
 ## Troubleshooting
 
+- **Waylandでホットキーが反応しない:** VoiceTermはWayland上でevdevを使います。
+  一度だけ `sudo usermod -aG input "$USER"` を実行し、ログアウトして再ログインしてください。
+  VoiceTermは自動起動しないため、再ログイン後はアプリ一覧から手動で起動します。
 - **The combo triggers your desktop (e.g. Super+Alt moves a window):** your
   window manager has a shortcut on the same combo. Change `hotkey.key` to
   something free like `f9` or `pause`.

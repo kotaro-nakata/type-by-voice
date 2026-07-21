@@ -27,6 +27,9 @@ STATE_LABELS = {
     "idle": "待機中",
     "recording": "録音中",
     "transcribing": "処理中",
+    "input-error": "ホットキーエラー",
+    "audio-error": "マイクエラー",
+    "model-error": "モデルエラー",
 }
 
 

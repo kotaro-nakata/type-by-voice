@@ -26,6 +26,9 @@ COLORS = {
     "loading": (150, 157, 170),      # grey
     "idle": (52, 211, 153),          # green  (ready / waiting)
     "transcribing": (251, 191, 36),  # yellow (processing)
+    "input-error": (168, 85, 247),   # purple (hotkey unavailable)
+    "audio-error": (168, 85, 247),   # purple (microphone unavailable)
+    "model-error": (168, 85, 247),   # purple (model unavailable)
 }
 REC_COLOR = (239, 68, 68)    # red  (recording)
 WHITE = (255, 255, 255)

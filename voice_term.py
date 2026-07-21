@@ -130,6 +130,7 @@ class Recorder:
         self._buffer: list[np.ndarray] = []
         self._lock = threading.Lock()
         self.level = 0.0  # latest mic RMS (0..~1), streamed to the tray icon
+        self._last_status = None
         self.stream = sd.InputStream(
             samplerate=sample_rate,
             channels=1,
@@ -140,8 +141,10 @@ class Recorder:
 
     def _callback(self, indata, frames, time_info, status):
         if status:
-            # Overflows are usually harmless; print sparingly.
-            pass
+            current = str(status)
+            if current != self._last_status:
+                print(f"[warn] Microphone stream: {current}")
+                self._last_status = current
         if self._recording.is_set():
             with self._lock:
                 self._buffer.append(indata.copy())
@@ -151,7 +154,10 @@ class Recorder:
             self.level = 0.0
 
     def start(self):
-        self.stream.start()
+        try:
+            self.stream.start()
+        except Exception as exc:
+            raise RuntimeError(f"マイクを開始できませんでした: {exc}") from exc
 
     def begin(self):
         with self._lock:
@@ -481,7 +487,7 @@ class App:
         except Exception as e:
             print(f"[error] Model load failed: {e}")
             notify("voice-term", f"モデル読込に失敗しました: {str(e)[:120]}")
-            self._set_state("idle")
+            self._set_state("model-error")
             return
         self._ready.set()
         self._set_state("idle")
@@ -551,15 +557,30 @@ class App:
         worker = threading.Thread(target=self._worker, daemon=True)
         worker.start()
         threading.Thread(target=self._level_pump, daemon=True).start()
-        self.recorder.start()
+        try:
+            self.recorder.start()
+        except Exception as exc:
+            print(f"[error] {exc}")
+            self._set_state("audio-error")
+            notify("voice-term", str(exc)[:120])
+            return
 
         self._set_state("loading")
         self._start_tray()
         notify("voice-term", "起動中… モデルを読み込んでいます。", timeout_ms=2000)
         threading.Thread(target=self._init_model, daemon=True).start()
 
-        self._listener = keyboard.Listener(on_press=self._on_press, on_release=self._on_release)
-        self._listener.start()
+        if pb.IS_LINUX and os.environ.get("XDG_SESSION_TYPE", "").lower() == "wayland":
+            from wayland_hotkey import WaylandHotkeyListener
+            self._listener = WaylandHotkeyListener(self._on_press, self._on_release)
+        else:
+            self._listener = keyboard.Listener(on_press=self._on_press, on_release=self._on_release)
+        try:
+            self._listener.start()
+        except PermissionError as exc:
+            print(f"[error] Hotkey listener unavailable: {exc}")
+            self._set_state("input-error")
+            notify("voice-term", "ホットキーを監視できません。inputグループの設定が必要です。")
 
         # Linux: the tray "Quit" item sends SIGTERM to us; shut down gracefully.
         # (Windows never delivers SIGTERM — its tray calls shutdown() directly.)

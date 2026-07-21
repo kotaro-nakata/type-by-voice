@@ -49,6 +49,9 @@ STATE_LABELS = {
     "idle": "待機中 (green)",
     "recording": "録音中 (red)",
     "transcribing": "処理中 (yellow)",
+    "input-error": "ホットキーエラー (purple)",
+    "audio-error": "マイクエラー (purple)",
+    "model-error": "モデルエラー (purple)",
 }
 
 
