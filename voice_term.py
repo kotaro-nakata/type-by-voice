@@ -827,21 +827,36 @@ class App:
         runs on background threads."""
         import rumps
 
-        icons = {"loading": "🟡", "idle": "🎙️", "recording": "🔴", "transcribing": "✍️"}
+        # Colour-coded like the Linux tray: idle is a clearly-visible green dot.
+        icons = {"loading": "⚪", "idle": "🟢", "recording": "🔴", "transcribing": "🟠"}
         labels = {
-            "loading": "Loading model…",
-            "idle": "Ready — hold Cmd+Alt to dictate",
-            "recording": "● Recording…",
-            "transcribing": "Transcribing…",
+            "loading": "⚪ Loading model…",
+            "idle": "🟢 Ready — hold Cmd+Alt to dictate",
+            "recording": "🔴 Recording…",
+            "transcribing": "🟠 Transcribing…",
         }
+        keys = self.cfg["hotkey"]["key"]
+        keys_str = " or ".join(map(str, keys)) if isinstance(keys, (list, tuple)) else str(keys)
         outer = self
 
         class _MenuBar(rumps.App):
             def __init__(self):
-                super().__init__("🟡", quit_button=None)
+                super().__init__("⚪", quit_button=None)
                 self._status = rumps.MenuItem("Starting…")
-                self.menu = [self._status, None,
-                             rumps.MenuItem("Quit voice-term", callback=self._on_quit)]
+                # Live status on top, then a legend of what each colour means.
+                self.menu = [
+                    self._status,
+                    None,
+                    rumps.MenuItem("What the colours mean:"),
+                    rumps.MenuItem("    🟢  Ready / idle"),
+                    rumps.MenuItem("    🔴  Recording your voice"),
+                    rumps.MenuItem("    🟠  Transcribing"),
+                    rumps.MenuItem("    ⚪  Loading the model"),
+                    None,
+                    rumps.MenuItem(f"Hotkey:  hold {keys_str}"),
+                    None,
+                    rumps.MenuItem("Quit voice-term", callback=self._on_quit),
+                ]
                 self._timer = rumps.Timer(self._refresh, 0.15)
                 self._timer.start()
 
@@ -850,8 +865,8 @@ class App:
                     rumps.quit_application()
                     return
                 base = (outer._state or "idle").split()[0]
-                self.title = icons.get(base, "🎙️")
-                self._status.title = labels.get(base, "Ready")
+                self.title = icons.get(base, "🟢")
+                self._status.title = labels.get(base, "🟢 Ready")
 
             def _on_quit(self, _):
                 outer.shutdown()
