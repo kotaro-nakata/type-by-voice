@@ -535,6 +535,17 @@ def _make_backend(cfg: dict):
     return FasterWhisperBackend(cfg)
 
 
+def _macos_menubar_available() -> bool:
+    """True if we can show a macOS menu-bar item (rumps installed)."""
+    if not _IS_MACOS:
+        return False
+    try:
+        import rumps  # noqa: F401
+        return True
+    except Exception:
+        return False
+
+
 # --------------------------------------------------------------------------- #
 # Main app
 # --------------------------------------------------------------------------- #
@@ -770,7 +781,9 @@ class App:
         self.recorder.start()
 
         self._set_state("loading")
-        self._start_tray()
+        use_macos_menubar = _IS_MACOS and self._tray_enabled and _macos_menubar_available()
+        if not use_macos_menubar:
+            self._start_tray()  # Linux GTK tray helper (no-op elsewhere)
         notify("voice-term", "起動中… モデルを読み込んでいます。", timeout_ms=2000)
         # NB: the backend is loaded inside _worker (not here) so that MLX's
         # thread-local GPU stream is created on the same thread that later runs
@@ -783,6 +796,23 @@ class App:
         # The tray "Quit" item sends SIGTERM to us; shut down gracefully.
         signal.signal(signal.SIGTERM, lambda *a: self.shutdown())
 
+        if use_macos_menubar:
+            # Menu-bar item on the main thread. As a proper NSApplication, a
+            # re-launch (double-clicking the icon while it runs) reactivates
+            # this instance instead of spawning a second process that dies on
+            # the single-instance lock — which macOS reports to the user as
+            # "the application is already closed".
+            try:
+                self._run_macos_menubar()
+            except Exception as e:
+                print(f"[warn] menu bar unavailable ({e}); running without it.")
+                self._idle_loop()
+            finally:
+                self.shutdown()
+        else:
+            self._idle_loop()
+
+    def _idle_loop(self):
         try:
             while not self._stop.is_set():
                 time.sleep(0.2)
@@ -790,6 +820,44 @@ class App:
             pass
         finally:
             self.shutdown()
+
+    def _run_macos_menubar(self):
+        """Run a macOS menu-bar status item (the mac counterpart of the Linux
+        tray). Blocks on the main thread until quit; everything else already
+        runs on background threads."""
+        import rumps
+
+        icons = {"loading": "🟡", "idle": "🎙️", "recording": "🔴", "transcribing": "✍️"}
+        labels = {
+            "loading": "Loading model…",
+            "idle": "Ready — hold Cmd+Alt to dictate",
+            "recording": "● Recording…",
+            "transcribing": "Transcribing…",
+        }
+        outer = self
+
+        class _MenuBar(rumps.App):
+            def __init__(self):
+                super().__init__("🟡", quit_button=None)
+                self._status = rumps.MenuItem("Starting…")
+                self.menu = [self._status, None,
+                             rumps.MenuItem("Quit voice-term", callback=self._on_quit)]
+                self._timer = rumps.Timer(self._refresh, 0.15)
+                self._timer.start()
+
+            def _refresh(self, _):
+                if outer._stop.is_set():
+                    rumps.quit_application()
+                    return
+                base = (outer._state or "idle").split()[0]
+                self.title = icons.get(base, "🎙️")
+                self._status.title = labels.get(base, "Ready")
+
+            def _on_quit(self, _):
+                outer.shutdown()
+                rumps.quit_application()
+
+        _MenuBar().run()
 
 
 def _preload_cuda_libs():

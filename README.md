@@ -105,8 +105,11 @@ AppleScript (System Events).
 >
 > **GPU:** on Apple Silicon, `backend = "auto"` uses **MLX** (`whisper-large-v3-turbo`)
 > on the GPU — typically several times faster than real time. On Intel Macs it
-> falls back to faster-whisper on CPU. There is no tray icon on macOS yet (the
-> app still works; notifications use the native macOS toast).
+> falls back to faster-whisper on CPU.
+>
+> **Menu bar:** on macOS the status lives in a **menu-bar item** (top-right) — the
+> counterpart of the Linux tray — showing 🟡 loading / 🎙️ ready / 🔴 recording /
+> ✍️ transcribing, with a **Quit** item. Set `ui.tray = false` to disable it.
 
 #### Clickable app (Launchpad / Dock)
 
@@ -121,7 +124,9 @@ Bundling it as a `.app` also means macOS attributes the **Microphone**,
 **Accessibility**, and **Input Monitoring** permissions to *type-by-voice* by
 name (and they persist), instead of to whichever terminal you launched it from.
 The first time you press the hotkey, grant those three in **System Settings →
-Privacy & Security**, then relaunch. Quit from the Dock icon (right-click → Quit).
+Privacy & Security**, then relaunch. While running it shows a **menu-bar item**
+(top-right); quit from there. Re-launching the icon while it's already running
+just reactivates it (no duplicate, no error).
 
 ## Usage
 

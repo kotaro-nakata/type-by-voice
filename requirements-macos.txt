@@ -10,3 +10,5 @@ numpy>=1.26
 pynput>=1.7.6
 # Apple Silicon GPU acceleration (skip on Intel Macs — it will be unused):
 mlx-whisper>=0.4.0 ; platform_machine == "arm64"
+# Menu-bar status item (the macOS counterpart of the Linux tray icon):
+rumps>=0.4.0
