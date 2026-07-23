@@ -646,6 +646,8 @@ class App:
 
     # --- transcription worker --- #
     def _worker(self):
+        # Load the model on THIS thread (see _load_backend / run() for why).
+        self._load_backend()
         while not self._stop.is_set():
             try:
                 audio = self._jobs.get(timeout=0.2)
@@ -699,8 +701,9 @@ class App:
         self._held.discard(key_id(key))
         self._update_chord()
 
-    def _init_model(self):
-        """Load the backend in the background so the tray can show progress."""
+    def _load_backend(self):
+        """Load the backend. Called from the worker thread so MLX inference and
+        model creation share one thread (MLX's GPU stream is thread-local)."""
         try:
             self.backend = _make_backend(self.cfg)
             print("[model] Ready.")
@@ -769,7 +772,10 @@ class App:
         self._set_state("loading")
         self._start_tray()
         notify("voice-term", "起動中… モデルを読み込んでいます。", timeout_ms=2000)
-        threading.Thread(target=self._init_model, daemon=True).start()
+        # NB: the backend is loaded inside _worker (not here) so that MLX's
+        # thread-local GPU stream is created on the same thread that later runs
+        # inference. Loading on a different thread crashes MLX with
+        # "no Stream(gpu, N) in current thread".
 
         self._listener = keyboard.Listener(on_press=self._on_press, on_release=self._on_release)
         self._listener.start()
