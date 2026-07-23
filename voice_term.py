@@ -855,7 +855,9 @@ def _acquire_single_instance():
     except OSError:
         print("[error] voice-term is already running. Exiting.")
         notify("voice-term", "すでに起動しています")
-        sys.exit(1)
+        # On macOS a non-zero exit from the .app pops a "quit unexpectedly"
+        # dialog; exit cleanly there so a double-click just no-ops with a toast.
+        sys.exit(0 if _IS_MACOS else 1)
     return fh  # keep open for the process lifetime
 
 
