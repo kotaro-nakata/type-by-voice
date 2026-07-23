@@ -12,6 +12,7 @@ from __future__ import annotations
 import os
 import sys
 import shutil
+import platform
 import signal
 import subprocess
 import threading
@@ -31,11 +32,28 @@ from pynput import keyboard
 
 CONFIG_PATH = Path.home() / ".config" / "voice-term" / "config.toml"
 
+_IS_MACOS = sys.platform == "darwin"
 _HAS_NOTIFY = shutil.which("notify-send") is not None
+_HAS_OSASCRIPT = shutil.which("osascript") is not None
+
+
+def _osa_escape(text: str) -> str:
+    """Escape a Python string for embedding inside an AppleScript string literal."""
+    return text.replace("\\", "\\\\").replace('"', '\\"')
 
 
 def notify(summary: str, body: str = "", timeout_ms: int = 1500):
     """Best-effort desktop toast so feedback shows even without a terminal."""
+    if _IS_MACOS and _HAS_OSASCRIPT:
+        try:
+            script = (
+                f'display notification "{_osa_escape(body)}" '
+                f'with title "{_osa_escape(summary)}"'
+            )
+            subprocess.run(["osascript", "-e", script], check=False)
+        except Exception:
+            pass
+        return
     if not _HAS_NOTIFY:
         return
     try:
@@ -50,10 +68,18 @@ DEFAULT_CONFIG = """\
 # voice-term configuration
 
 [model]
+# Transcription backend.
+#   "auto"          -> "mlx" on Apple Silicon Macs (GPU), else "faster-whisper".
+#   "faster-whisper"-> CTranslate2: CPU everywhere, CUDA on NVIDIA GPUs.
+#   "mlx"           -> MLX: Apple Silicon GPU (Metal) acceleration (macOS only).
+backend = "auto"
 # faster-whisper model. "large-v3-turbo" is fast + multilingual (good for ja).
 # Other options: "large-v3", "medium", "small", or a local path.
 name = "large-v3-turbo"
-# "auto" -> CUDA if available else CPU. Or force "cuda" / "cpu".
+# MLX model repo, used when backend = "mlx". Pick a matching size from
+# https://huggingface.co/mlx-community (whisper-*). Empty = derive from `name`.
+mlx_model = "mlx-community/whisper-large-v3-turbo"
+# "auto" -> CUDA if available else CPU. Or force "cuda" / "cpu". (faster-whisper)
 device = "auto"
 # "auto" -> float16 on GPU, int8 on CPU. Or "float16" / "int8" / "int8_float16".
 compute_type = "auto"
@@ -121,18 +147,34 @@ def load_config() -> dict:
 # Output backends
 # --------------------------------------------------------------------------- #
 class Outputter:
-    """Sends text to the focused window. Detects X11 vs Wayland tools."""
+    """Sends text to the focused window. Detects macOS / X11 / Wayland tools."""
 
     def __init__(self, method: str, trailing_space: bool):
         self.method = method
         self.trailing_space = trailing_space
         self.session = os.environ.get("XDG_SESSION_TYPE", "").lower()
+        self.is_macos = _IS_MACOS
         self._detect()
 
     def _detect(self):
         self.copy_cmd = None
         self.paste_cmd = None
         self.type_cmd = None
+
+        if self.is_macos:
+            # Clipboard via pbcopy; paste/typing via AppleScript (System Events).
+            # These need Accessibility permission for the app running voice-term.
+            if shutil.which("pbcopy"):
+                self.copy_cmd = ["pbcopy"]
+            if shutil.which("osascript"):
+                self.paste_cmd = [
+                    "osascript", "-e",
+                    'tell application "System Events" to keystroke "v" using command down',
+                ]
+                # Direct typing is handled specially in send() (osascript needs
+                # the text inlined, not on stdin); this marker just signals support.
+                self.type_cmd = ["osascript"]
+            return
 
         if self.session == "wayland":
             if shutil.which("wl-copy"):
@@ -162,6 +204,16 @@ class Outputter:
             return False
 
     def warn_if_missing(self):
+        if self.is_macos:
+            if self.method in ("paste", "clipboard") and not self.copy_cmd:
+                print("[warn] pbcopy not found (expected on macOS).")
+            if self.method in ("paste", "type") and not self.paste_cmd:
+                print("[warn] osascript not found; cannot paste/type on macOS.")
+            elif self.method in ("paste", "type"):
+                print("[info] macOS: grant Accessibility permission to your "
+                      "terminal/app (System Settings > Privacy & Security > "
+                      "Accessibility) so paste/typing works.")
+            return
         if self.method in ("paste", "clipboard") and not self.copy_cmd:
             tool = "wl-copy" if self.session == "wayland" else "xclip"
             print(f"[warn] No clipboard tool found. Install {tool}.")
@@ -172,6 +224,18 @@ class Outputter:
             tool = "wtype/ydotool" if self.session == "wayland" else "xdotool"
             print(f"[warn] No typing tool found. Install {tool}.")
 
+    def _type_macos(self, text: str) -> bool:
+        """Type text directly via AppleScript keystroke. Returns success."""
+        try:
+            script = (
+                'tell application "System Events" to keystroke '
+                f'"{_osa_escape(text)}"'
+            )
+            subprocess.run(["osascript", "-e", script], check=True)
+            return True
+        except subprocess.SubprocessError:
+            return False
+
     def send(self, text: str):
         if not text:
             return
@@ -179,11 +243,16 @@ class Outputter:
             text = text + " "
 
         if self.method == "type" and self.type_cmd:
-            try:
-                subprocess.run(self.type_cmd, input=text.encode("utf-8"), check=True)
-                return
-            except subprocess.SubprocessError as e:
-                print(f"[warn] type failed ({e}); falling back to clipboard.")
+            if self.is_macos:
+                if self._type_macos(text):
+                    return
+                print("[warn] type failed; falling back to clipboard.")
+            else:
+                try:
+                    subprocess.run(self.type_cmd, input=text.encode("utf-8"), check=True)
+                    return
+                except subprocess.SubprocessError as e:
+                    print(f"[warn] type failed ({e}); falling back to clipboard.")
 
         # paste / clipboard (and type-fallback)
         if not self._copy(text):
@@ -336,6 +405,148 @@ def parse_hotkey(value) -> list:
 
 
 # --------------------------------------------------------------------------- #
+# Transcription backends
+# --------------------------------------------------------------------------- #
+# Two interchangeable engines behind a tiny interface:
+#   detect_language(audio) -> [(lang, prob), ...] | None
+#   transcribe(audio, language) -> str
+# faster-whisper covers CPU (all platforms) and NVIDIA CUDA; MLX covers the
+# Apple Silicon GPU. The App code is backend-agnostic.
+
+# Map plain Whisper size names to mlx-community repos when `mlx_model` is unset.
+_MLX_MODEL_MAP = {
+    "large-v3-turbo": "mlx-community/whisper-large-v3-turbo",
+    "large-v3": "mlx-community/whisper-large-v3-mlx",
+    "large-v2": "mlx-community/whisper-large-v2-mlx",
+    "medium": "mlx-community/whisper-medium-mlx",
+    "small": "mlx-community/whisper-small-mlx",
+    "base": "mlx-community/whisper-base-mlx",
+    "tiny": "mlx-community/whisper-tiny-mlx",
+}
+
+
+def _mlx_repo(cfg: dict) -> str:
+    explicit = str(cfg["model"].get("mlx_model", "")).strip()
+    if explicit:
+        return explicit
+    name = str(cfg["model"]["name"])
+    if "/" in name:  # already a HF repo / local path
+        return name
+    return _MLX_MODEL_MAP.get(name, f"mlx-community/whisper-{name}")
+
+
+class FasterWhisperBackend:
+    """CTranslate2 engine: CPU on any platform, CUDA on NVIDIA GPUs."""
+
+    def __init__(self, cfg: dict):
+        _preload_cuda_libs()
+        from faster_whisper import WhisperModel
+
+        name = cfg["model"]["name"]
+        device = cfg["model"]["device"].lower()
+        compute_type = cfg["model"]["compute_type"].lower()
+        if device == "auto":
+            device = "cuda" if _cuda_available() else "cpu"
+        if compute_type == "auto":
+            compute_type = "float16" if device == "cuda" else "int8"
+
+        print(f"[model] Loading '{name}' via faster-whisper on {device} ({compute_type}).")
+        print("[model] First run downloads the model; this can take a while...")
+        try:
+            self.model = WhisperModel(name, device=device, compute_type=compute_type)
+        except Exception as e:
+            if device == "cuda":
+                print(f"[warn] CUDA load failed ({e}); falling back to CPU/int8.")
+                self.model = WhisperModel(name, device="cpu", compute_type="int8")
+            else:
+                raise
+
+    def detect_language(self, audio):
+        try:
+            _, _, probs = self.model.detect_language(audio=audio)
+            return list(probs)
+        except Exception as e:
+            print(f"[warn] Language detection failed ({e}); letting Whisper decide.")
+            return None
+
+    def transcribe(self, audio, language) -> str:
+        segments, _ = self.model.transcribe(
+            audio, language=language, beam_size=5, vad_filter=True,
+        )
+        return "".join(seg.text for seg in segments).strip()
+
+
+class MLXWhisperBackend:
+    """MLX engine: Apple Silicon GPU (Metal) acceleration. macOS only."""
+
+    def __init__(self, cfg: dict):
+        import mlx_whisper
+        from mlx_whisper.load_models import load_model
+
+        self._mlx_whisper = mlx_whisper
+        self.repo = _mlx_repo(cfg)
+        print(f"[model] Loading '{self.repo}' via MLX on the Apple GPU.")
+        print("[model] First run downloads the model; this can take a while...")
+        # Warm the (lru-cached) model so the first transcribe isn't cold and so
+        # detect_language reuses the very same weights.
+        self._model = load_model(self.repo)
+
+    def detect_language(self, audio):
+        try:
+            import mlx.core as mx
+            from mlx_whisper.audio import (
+                log_mel_spectrogram, pad_or_trim, N_SAMPLES, N_FRAMES,
+            )
+
+            # Mirror mlx_whisper.transcribe's own detection: mel padded by
+            # N_SAMPLES, trimmed to one N_FRAMES window, in the model dtype.
+            mel = log_mel_spectrogram(
+                audio, n_mels=self._model.dims.n_mels, padding=N_SAMPLES,
+            )
+            mel_segment = pad_or_trim(mel, N_FRAMES, axis=-2).astype(mx.float32)
+            _, probs = self._model.detect_language(mel_segment)
+            first = probs[0] if isinstance(probs, (list, tuple)) else probs
+            return list(first.items())
+        except Exception as e:
+            print(f"[warn] Language detection failed ({e}); letting Whisper decide.")
+            return None
+
+    def transcribe(self, audio, language) -> str:
+        result = self._mlx_whisper.transcribe(
+            audio,
+            path_or_hf_repo=self.repo,
+            language=language,
+            condition_on_previous_text=False,
+        )
+        return str(result.get("text", "")).strip()
+
+
+def _make_backend(cfg: dict):
+    """Pick and build the transcription backend from config (with fallback)."""
+    backend = str(cfg["model"].get("backend", "auto")).lower()
+    if backend == "auto":
+        apple_silicon = _IS_MACOS and platform.machine() == "arm64"
+        backend = "mlx" if apple_silicon else "faster-whisper"
+    if backend == "mlx":
+        try:
+            return MLXWhisperBackend(cfg)
+        except Exception as e:
+            print(f"[warn] MLX backend unavailable ({e}); using faster-whisper.")
+    return FasterWhisperBackend(cfg)
+
+
+def _macos_menubar_available() -> bool:
+    """True if we can show a macOS menu-bar item (rumps installed)."""
+    if not _IS_MACOS:
+        return False
+    try:
+        import rumps  # noqa: F401
+        return True
+    except Exception:
+        return False
+
+
+# --------------------------------------------------------------------------- #
 # Main app
 # --------------------------------------------------------------------------- #
 class App:
@@ -375,34 +586,8 @@ class App:
         self._tray_enabled = cfg.get("ui", {}).get("tray", True)
         self._state = "loading"
 
-        # Model is loaded asynchronously in run() so the tray can show progress.
-        self.model = None
-
-    def _load_model(self):
-        _preload_cuda_libs()
-        from faster_whisper import WhisperModel
-
-        name = self.cfg["model"]["name"]
-        device = self.cfg["model"]["device"].lower()
-        compute_type = self.cfg["model"]["compute_type"].lower()
-
-        if device == "auto":
-            device = "cuda" if _cuda_available() else "cpu"
-        if compute_type == "auto":
-            compute_type = "float16" if device == "cuda" else "int8"
-
-        print(f"[model] Loading '{name}' on {device} ({compute_type}).")
-        print("[model] First run downloads the model; this can take a while...")
-        try:
-            model = WhisperModel(name, device=device, compute_type=compute_type)
-        except Exception as e:
-            if device == "cuda":
-                print(f"[warn] CUDA load failed ({e}); falling back to CPU/int8.")
-                model = WhisperModel(name, device="cpu", compute_type="int8")
-            else:
-                raise
-        print("[model] Ready.")
-        return model
+        # Backend is loaded asynchronously in run() so the tray can show progress.
+        self.backend = None
 
     def _write_state(self, text: str):
         try:
@@ -462,12 +647,8 @@ class App:
         """
         if self.language is not None:
             return self.language
-        try:
-            _, _, probs = self.model.detect_language(audio=audio)
-        except Exception as e:
-            print(f"[warn] Language detection failed ({e}); letting Whisper decide.")
-            return None
-        if not self.auto_languages:
+        probs = self.backend.detect_language(audio)
+        if not probs or not self.auto_languages:
             return None
         ranked = {lang: p for lang, p in probs}
         best = max(self.auto_languages, key=lambda l: ranked.get(l, 0.0))
@@ -476,6 +657,8 @@ class App:
 
     # --- transcription worker --- #
     def _worker(self):
+        # Load the model on THIS thread (see _load_backend / run() for why).
+        self._load_backend()
         while not self._stop.is_set():
             try:
                 audio = self._jobs.get(timeout=0.2)
@@ -483,13 +666,7 @@ class App:
                 continue
             try:
                 language = self._pick_language(audio)
-                segments, info = self.model.transcribe(
-                    audio,
-                    language=language,
-                    beam_size=5,
-                    vad_filter=True,
-                )
-                text = "".join(seg.text for seg in segments).strip()
+                text = self.backend.transcribe(audio, language)
             except Exception as e:
                 print(f"[error] Transcription failed: {e}")
                 notify("❌ 変換失敗", str(e)[:120])
@@ -535,10 +712,12 @@ class App:
         self._held.discard(key_id(key))
         self._update_chord()
 
-    def _init_model(self):
-        """Load the model in the background so the tray can show progress."""
+    def _load_backend(self):
+        """Load the backend. Called from the worker thread so MLX inference and
+        model creation share one thread (MLX's GPU stream is thread-local)."""
         try:
-            self.model = self._load_model()
+            self.backend = _make_backend(self.cfg)
+            print("[model] Ready.")
         except Exception as e:
             print(f"[error] Model load failed: {e}")
             notify("voice-term", f"モデル読込に失敗しました: {str(e)[:120]}")
@@ -602,9 +781,14 @@ class App:
         self.recorder.start()
 
         self._set_state("loading")
-        self._start_tray()
+        use_macos_menubar = _IS_MACOS and self._tray_enabled and _macos_menubar_available()
+        if not use_macos_menubar:
+            self._start_tray()  # Linux GTK tray helper (no-op elsewhere)
         notify("voice-term", "起動中… モデルを読み込んでいます。", timeout_ms=2000)
-        threading.Thread(target=self._init_model, daemon=True).start()
+        # NB: the backend is loaded inside _worker (not here) so that MLX's
+        # thread-local GPU stream is created on the same thread that later runs
+        # inference. Loading on a different thread crashes MLX with
+        # "no Stream(gpu, N) in current thread".
 
         self._listener = keyboard.Listener(on_press=self._on_press, on_release=self._on_release)
         self._listener.start()
@@ -612,6 +796,23 @@ class App:
         # The tray "Quit" item sends SIGTERM to us; shut down gracefully.
         signal.signal(signal.SIGTERM, lambda *a: self.shutdown())
 
+        if use_macos_menubar:
+            # Menu-bar item on the main thread. As a proper NSApplication, a
+            # re-launch (double-clicking the icon while it runs) reactivates
+            # this instance instead of spawning a second process that dies on
+            # the single-instance lock — which macOS reports to the user as
+            # "the application is already closed".
+            try:
+                self._run_macos_menubar()
+            except Exception as e:
+                print(f"[warn] menu bar unavailable ({e}); running without it.")
+                self._idle_loop()
+            finally:
+                self.shutdown()
+        else:
+            self._idle_loop()
+
+    def _idle_loop(self):
         try:
             while not self._stop.is_set():
                 time.sleep(0.2)
@@ -619,6 +820,59 @@ class App:
             pass
         finally:
             self.shutdown()
+
+    def _run_macos_menubar(self):
+        """Run a macOS menu-bar status item (the mac counterpart of the Linux
+        tray). Blocks on the main thread until quit; everything else already
+        runs on background threads."""
+        import rumps
+
+        # Colour-coded like the Linux tray: idle is a clearly-visible green dot.
+        icons = {"loading": "⚪", "idle": "🟢", "recording": "🔴", "transcribing": "🟠"}
+        labels = {
+            "loading": "⚪ Loading model…",
+            "idle": "🟢 Ready — hold Cmd+Alt to dictate",
+            "recording": "🔴 Recording…",
+            "transcribing": "🟠 Transcribing…",
+        }
+        keys = self.cfg["hotkey"]["key"]
+        keys_str = " or ".join(map(str, keys)) if isinstance(keys, (list, tuple)) else str(keys)
+        outer = self
+
+        class _MenuBar(rumps.App):
+            def __init__(self):
+                super().__init__("⚪", quit_button=None)
+                self._status = rumps.MenuItem("Starting…")
+                # Live status on top, then a legend of what each colour means.
+                self.menu = [
+                    self._status,
+                    None,
+                    rumps.MenuItem("What the colours mean:"),
+                    rumps.MenuItem("    🟢  Ready / idle"),
+                    rumps.MenuItem("    🔴  Recording your voice"),
+                    rumps.MenuItem("    🟠  Transcribing"),
+                    rumps.MenuItem("    ⚪  Loading the model"),
+                    None,
+                    rumps.MenuItem(f"Hotkey:  hold {keys_str}"),
+                    None,
+                    rumps.MenuItem("Quit voice-term", callback=self._on_quit),
+                ]
+                self._timer = rumps.Timer(self._refresh, 0.15)
+                self._timer.start()
+
+            def _refresh(self, _):
+                if outer._stop.is_set():
+                    rumps.quit_application()
+                    return
+                base = (outer._state or "idle").split()[0]
+                self.title = icons.get(base, "🟢")
+                self._status.title = labels.get(base, "🟢 Ready")
+
+            def _on_quit(self, _):
+                outer.shutdown()
+                rumps.quit_application()
+
+        _MenuBar().run()
 
 
 def _preload_cuda_libs():
@@ -684,7 +938,9 @@ def _acquire_single_instance():
     except OSError:
         print("[error] voice-term is already running. Exiting.")
         notify("voice-term", "すでに起動しています")
-        sys.exit(1)
+        # On macOS a non-zero exit from the .app pops a "quit unexpectedly"
+        # dialog; exit cleanly there so a double-click just no-ops with a toast.
+        sys.exit(0 if _IS_MACOS else 1)
     return fh  # keep open for the process lifetime
 
 

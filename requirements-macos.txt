@@ -1,0 +1,14 @@
+# macOS dependencies (no NVIDIA/CUDA packages).
+# Prereq: brew install portaudio
+# Install: .venv/bin/pip install -r requirements-macos.txt
+#
+# On Apple Silicon, backend = "auto" uses MLX for GPU (Metal) acceleration.
+# faster-whisper is kept as a CPU fallback and for Intel Macs.
+faster-whisper>=1.0.3
+sounddevice>=0.4.6
+numpy>=1.26
+pynput>=1.7.6
+# Apple Silicon GPU acceleration (skip on Intel Macs — it will be unused):
+mlx-whisper>=0.4.0 ; platform_machine == "arm64"
+# Menu-bar status item (the macOS counterpart of the Linux tray icon):
+rumps>=0.4.0

@@ -41,7 +41,7 @@ few things they often get wrong:
 - 🎚️ Push-to-talk (hold) or toggle mode
 - ⌨️ Configurable global hotkey or combo (default: **hold Windows + Alt together**)
 - 📋 Clipboard-paste, direct-type, or copy-only output
-- 🖥️ X11 (`xdotool`) and Wayland (`wtype` / `ydotool`) auto-detection
+- 🖥️ Output backend auto-detection: X11 (`xdotool`), Wayland (`wtype` / `ydotool`), and macOS (`pbcopy` + AppleScript)
 - 🚦 Colour-coded tray icon (grey→blue→green→amber) so you always know the state
 - 🌊 While recording, the green icon emits **sonar ripples that pulse to your voice**
 - 🖱️ Quit from the tray icon's menu; one-click app launcher (no terminal)
@@ -49,11 +49,14 @@ few things they often get wrong:
 
 ## Requirements
 
-- Linux (developed on Ubuntu / GNOME, X11)
+- **Linux** (developed on Ubuntu / GNOME, X11) or **macOS** (Apple Silicon or Intel)
 - Python 3.11+
-- NVIDIA GPU with CUDA for best speed — **falls back to CPU automatically**
+- For best speed: **NVIDIA GPU + CUDA** on Linux, or the **Apple Silicon GPU**
+  (via MLX) on macOS — both **fall back to CPU automatically**
 
 ## Install
+
+### Linux
 
 ```bash
 git clone https://github.com/kotaro-nakata/type-by-voice.git
@@ -76,6 +79,54 @@ That's it — `./voice-term` and start talking. 👇
 > **Wayland:** install `wl-clipboard` and `wtype` (or `ydotool` + its daemon
 > and `/dev/uinput` permissions) instead of `xdotool`/`xclip`. The session type
 > is auto-detected at startup.
+
+### macOS
+
+```bash
+git clone https://github.com/kotaro-nakata/type-by-voice.git
+cd type-by-voice
+
+# 1. System package for audio capture
+brew install portaudio
+
+# 2. Python environment (uses MLX for Apple Silicon GPU; CPU fallback included)
+python3 -m venv .venv
+.venv/bin/pip install -r requirements-macos.txt
+```
+
+Then `./voice-term` and start talking. No `xdotool`/`xclip` needed — on macOS the
+text goes out via the native clipboard (`pbcopy`) and paste/typing via
+AppleScript (System Events).
+
+> **Permissions:** the first time you use the hotkey, macOS asks to allow the
+> app running `voice-term` (your **Terminal** / iTerm / etc.) under **System
+> Settings → Privacy & Security → Accessibility** *and* **Input Monitoring**.
+> Grant both, or the global hotkey and paste won't work.
+>
+> **GPU:** on Apple Silicon, `backend = "auto"` uses **MLX** (`whisper-large-v3-turbo`)
+> on the GPU — typically several times faster than real time. On Intel Macs it
+> falls back to faster-whisper on CPU.
+>
+> **Menu bar:** on macOS the status lives in a **menu-bar item** (top-right) — the
+> counterpart of the Linux tray — showing 🟡 loading / 🎙️ ready / 🔴 recording /
+> ✍️ transcribing, with a **Quit** item. Set `ui.tray = false` to disable it.
+
+#### Clickable app (Launchpad / Dock)
+
+The macOS counterpart of `install-desktop.sh`:
+
+```bash
+./install-app-macos.sh   # builds ~/Applications/type-by-voice.app (with icon)
+```
+
+Then launch **type-by-voice** from Launchpad or the Dock — no terminal needed.
+Bundling it as a `.app` also means macOS attributes the **Microphone**,
+**Accessibility**, and **Input Monitoring** permissions to *type-by-voice* by
+name (and they persist), instead of to whichever terminal you launched it from.
+The first time you press the hotkey, grant those three in **System Settings →
+Privacy & Security**, then relaunch. While running it shows a **menu-bar item**
+(top-right); quit from there. Re-launching the icon while it's already running
+just reactivates it (no duplicate, no error).
 
 ## Usage
 
@@ -134,9 +185,11 @@ Auto-created on first run at `~/.config/voice-term/config.toml`.
 
 | Key | Default | Notes |
 |---|---|---|
-| `model.name` | `large-v3-turbo` | Multilingual + fast. Or `large-v3`, `medium`, a local path. |
-| `model.device` | `auto` | `auto` → CUDA if available, else CPU. |
-| `model.compute_type` | `auto` | `auto` → `float16` (GPU) / `int8` (CPU). |
+| `model.backend` | `auto` | `auto` → **MLX** (Apple Silicon GPU) on macOS, else **faster-whisper**. Force `faster-whisper` or `mlx`. |
+| `model.name` | `large-v3-turbo` | faster-whisper model. Multilingual + fast. Or `large-v3`, `medium`, a local path. |
+| `model.mlx_model` | `mlx-community/whisper-large-v3-turbo` | MLX model repo (used when `backend = "mlx"`). Pick a matching size from [mlx-community](https://huggingface.co/mlx-community). |
+| `model.device` | `auto` | faster-whisper only: `auto` → CUDA if available, else CPU. |
+| `model.compute_type` | `auto` | faster-whisper only: `auto` → `float16` (GPU) / `int8` (CPU). |
 | `model.language` | `auto` | `auto` detects per phrase (restricted to `auto_languages`), so English types English and Japanese types Japanese. Or force `ja`, `en`, … |
 | `model.auto_languages` | `["ja", "en"]` | Candidates considered when `language = "auto"`. Keep it short for reliable detection. |
 | `hotkey.mode` | `ptt` | `ptt` (hold) or `toggle` (press to start/stop). |
