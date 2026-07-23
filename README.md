@@ -108,6 +108,21 @@ AppleScript (System Events).
 > falls back to faster-whisper on CPU. There is no tray icon on macOS yet (the
 > app still works; notifications use the native macOS toast).
 
+#### Clickable app (Launchpad / Dock)
+
+The macOS counterpart of `install-desktop.sh`:
+
+```bash
+./install-app-macos.sh   # builds ~/Applications/type-by-voice.app (with icon)
+```
+
+Then launch **type-by-voice** from Launchpad or the Dock — no terminal needed.
+Bundling it as a `.app` also means macOS attributes the **Microphone**,
+**Accessibility**, and **Input Monitoring** permissions to *type-by-voice* by
+name (and they persist), instead of to whichever terminal you launched it from.
+The first time you press the hotkey, grant those three in **System Settings →
+Privacy & Security**, then relaunch. Quit from the Dock icon (right-click → Quit).
+
 ## Usage
 
 ```bash
