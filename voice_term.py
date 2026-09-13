@@ -33,8 +33,9 @@ from platform_backend import notify
 
 CONFIG_PATH = pb.config_dir() / "config.toml"
 
-# Windows reserves the Win key for the OS, so the default combo differs per OS.
-DEFAULT_HOTKEY = "ctrl+alt" if pb.IS_WINDOWS else "cmd+alt"
+# Win(Super)+Alt を全 OS 共通の既定にする。Windows 実機でも Win+Alt の同時押しは
+# OS に横取りされず安定して動作することを確認済み。
+DEFAULT_HOTKEY = "cmd+alt"
 
 DEFAULT_CONFIG = f"""\
 # voice-term configuration
@@ -65,7 +66,7 @@ mode = "ptt"
 # alternatives. Modifier names cmd/super/win, alt, ctrl, shift each match their
 # left & right keys.
 # Examples: "cmd+alt" (hold Super+Alt), "ctrl_r", ["ctrl_r", "ctrl_l"], "f9".
-# Recommended: Linux "cmd+alt"; Windows "ctrl+alt" (the OS grabs the Win key).
+# If "cmd+alt" clashes with a desktop shortcut, try "ctrl+alt" or "f9".
 key = "{DEFAULT_HOTKEY}"
 
 [audio]

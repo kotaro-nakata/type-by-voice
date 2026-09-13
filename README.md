@@ -163,8 +163,9 @@ uv pip install --python .venv\Scripts\python.exe -r requirements.txt
 
 ### Windows notes
 
-- **Hotkey**: the default is **hold Ctrl + Alt together** (the Win key is
-  reserved by the OS). Change it in `%APPDATA%\voice-term\config.toml`.
+- **Hotkey**: the default is **hold Windows + Alt together**, same as Linux.
+  If it clashes with a shortcut, set e.g. `key = "ctrl+alt"` in
+  `%APPDATA%\voice-term\config.toml`.
 - **Config path**: `%APPDATA%\voice-term\config.toml`
   (Linux: `~/.config/voice-term/config.toml`).
 - **Logs**: `%LOCALAPPDATA%\voice-term\voice-term.log` (when launched via

@@ -225,6 +225,7 @@ Windows GPU 版の nvidia パッケージは後続タスクで検証してから
 
 ### Phase 4: 設定・依存・起動スクリプト
 - [x] **Step 4-1**: OS 別の既定ホットキー(#8) — Windows は `ctrl+alt`
+      （※実機で Win+Alt が安定動作したため、後に全 OS 共通の `cmd+alt` に戻した）
 - [x] **Step 4-2**: `requirements.txt` を OS 別マーカー付きに整理
       （`pystray` / `Pillow` / `pyperclip` 追加）
 - [x] **Step 4-3**: `run_windows.bat` 新設 + README に Windows 手順を追記
