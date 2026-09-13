@@ -136,12 +136,15 @@ tray icon (same colours + voice ripples) is drawn with `pystray`.
 
 ### Install & run
 
-1. Install Python 3.11+ from [python.org](https://python.org)
-   (check "Add python.exe to PATH").
+1. Install [uv](https://docs.astral.sh/uv/) (`winget install astral-sh.uv`,
+   recommended — it fetches Python 3.12 for you) **or** Python 3.11+ from
+   [python.org](https://python.org) (check "Add python.exe to PATH").
 2. Clone or download this repository.
 3. Double-click **`run_windows.bat`** — the first run creates the venv,
    installs dependencies and starts the app in the background (no console
    window). The first dictation also downloads the model (~1.5 GB).
+   If the venv later breaks (Python uninstalled/upgraded, or the folder was
+   moved), the launcher detects it and rebuilds it automatically.
 4. (Optional) Double-click **`install_shortcut.vbs`** to put a
    **"Voice Term"** icon on your desktop that launches the app.
 
@@ -151,12 +154,18 @@ Or from a terminal:
 py -3 -m venv .venv
 .venv\Scripts\pip install -r requirements.txt
 .venv\Scripts\python voice_term.py
+
+rem or, with uv:
+uv venv --python 3.12 .venv
+uv pip install --python .venv\Scripts\python.exe -r requirements.txt
+.venv\Scripts\python voice_term.py
 ```
 
 ### Windows notes
 
-- **Hotkey**: the default is **hold Ctrl + Alt together** (the Win key is
-  reserved by the OS). Change it in `%APPDATA%\voice-term\config.toml`.
+- **Hotkey**: the default is **hold Windows + Alt together**, same as Linux.
+  If it clashes with a shortcut, set e.g. `key = "ctrl+alt"` in
+  `%APPDATA%\voice-term\config.toml`.
 - **Config path**: `%APPDATA%\voice-term\config.toml`
   (Linux: `~/.config/voice-term/config.toml`).
 - **Logs**: `%LOCALAPPDATA%\voice-term\voice-term.log` (when launched via
