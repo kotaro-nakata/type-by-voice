@@ -546,9 +546,11 @@ class App:
 def main():
     if pb.IS_WINDOWS:
         # Windows consoles default to cp932; keep Japanese/emoji prints safe.
+        # pythonw でファイルへリダイレクトされるとブロックバッファになり、
+        # ログが終了時まで空に見えるため行バッファにする。
         try:
-            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-            sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+            sys.stdout.reconfigure(encoding="utf-8", errors="replace", line_buffering=True)
+            sys.stderr.reconfigure(encoding="utf-8", errors="replace", line_buffering=True)
         except Exception:
             pass
     if "--list-devices" in sys.argv:
